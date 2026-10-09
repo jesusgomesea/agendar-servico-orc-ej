@@ -1,0 +1,18 @@
+# Confere tipos, testes e build a cada push/PR.
+# `npm ci` é de propósito: falha quando o package-lock.json está fora de sincronia
+# com o package.json — exatamente o que derrubaria o deploy do Netlify sem aviso.
+name: checks
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

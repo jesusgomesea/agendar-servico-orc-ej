@@ -1,0 +1,77 @@
+/*
+ * Visual do site inteiro: tokens de cor/tipografia e poucas classes utilitárias.
+ *
+ * Regra: componente usa os tokens (bg-superficie, text-suave, border-borda…),
+ * nunca cor fixa. Trocar a identidade visual = mexer só neste bloco @theme.
+ *
+ * Tema único, escuro: preto e cinzas para as fotos e a logo "EJ" (branca)
+ * se destacarem. Contrastes conferidos para leitura (WCAG AA):
+ *   texto      #ededee sobre #131315 ≈ 15:1
+ *   suave      #a3a3ab sobre #131315 ≈ 7,6:1
+ *   fraco      #8a8a93 sobre #131315 ≈ 5,2:1 (só para texto auxiliar)
+ *   botão      #0a0a0b sobre #f2f0eb ≈ 18:1
+ *   WhatsApp   #04210f sobre #25d366 ≈ 9:1 (verde só no botão de enviar)
+ */
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
+
+@theme {
+  --color-fundo: #0a0a0b;
+  --color-superficie: #131315;
+  --color-superficie-2: #1b1b1e;
+  --color-superficie-3: #242428;
+  --color-borda: #2a2a2f;
+  --color-borda-forte: #3d3d44;
+  --color-texto: #ededee;
+  --color-suave: #a3a3ab;
+  --color-fraco: #8a8a93;
+  --color-destaque: #f2f0eb;
+  --color-sobre-destaque: #0a0a0b;
+  --color-whats: #25d366;
+  --color-whats-forte: #1fb457;
+  --color-sobre-whats: #04210f;
+  --color-ok: #6ee7a0;
+  --color-aviso: #fcd34d;
+  --color-erro: #fca5a5;
+  --color-info: #a5c8fd;
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-titulo: "Fraunces Variable", ui-serif, Georgia, serif;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-fundo);
+}
+
+body {
+  background: var(--color-fundo);
+  color: var(--color-texto);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Foco sempre visível para quem navega por teclado. */
+:focus-visible {
+  outline: 2px solid var(--color-destaque);
+  outline-offset: 2px;
+}
+
+/* Diálogo nativo (<dialog>) usado em components/ui/Modal.tsx. */
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.7);
+  backdrop-filter: blur(2px);
+}
+
+/* Números alinhados em colunas de valores. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Calendário do <input type="date"> claro sobre fundo escuro. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
+}

@@ -1,0 +1,21 @@
+# Publicação no Netlify.
+#
+# O site público (montador de orçamento) é estático; só /api/agenda roda no
+# servidor, sempre atrás do login do Netlify Identity. Não existe rota pública
+# que grave dados — por isso não há regra de rate limit aqui.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Runtime oficial do Next para Netlify: transforma as rotas de servidor em
+# Netlify Functions v2, que é o formato exigido pelo Netlify Identity.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Cabeçalhos básicos de segurança para todas as páginas.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
