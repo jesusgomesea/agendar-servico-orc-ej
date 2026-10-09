@@ -31,7 +31,18 @@ Os valores estão todos em [lib/catalogo.ts](lib/catalogo.ts). Ao mudar qualquer
 tabela antiga. Por enquanto, a mudança vai ao ar com um novo deploy. A edição pelo painel está prevista
 para a Fase 2.
 
-## Rodar no computador
+## Testar no computador
+
+**Jeito rápido:** dê dois cliques em **`Testar.bat`**. Ele instala o que faltar, sobe o site em
+**modo local** e abre o navegador em `http://localhost:3000`. O painel fica em
+`http://localhost:3000/painel`, **sem login**, e a agenda é salva em `.dados-locais/agenda.json`
+neste computador. Para parar, feche a janela preta. Para começar a agenda do zero, apague a pasta
+`.dados-locais`.
+
+O modo local só existe no servidor de desenvolvimento. O site publicado no Netlify nunca entra nele
+(ver [lib/modoLocal.ts](lib/modoLocal.ts)).
+
+**Pelo terminal:**
 
 ```bash
 npm install --registry=https://registry.yarnpkg.com
@@ -41,8 +52,9 @@ npm install --registry=https://registry.yarnpkg.com
 npm run dev:next
 ```
 
-- `npm run dev:next` sobe só o site (`http://localhost:3000`). O montador funciona inteiro. O painel
-  pede login e, sem o Netlify Identity, sempre volta para `/entrar`.
+- `npm run dev:next` sobe o site (`http://localhost:3000`). Com `NEXT_PUBLIC_PAINEL_LOCAL=1` em
+  `.env.development.local` (o `Testar.bat` cria esse arquivo), o painel abre em modo local. Sem ele, o
+  painel pede login e, sem o Netlify Identity, volta para `/entrar`.
 - Para testar o painel de verdade localmente: `npm run dev` (usa `netlify dev`, exige o
   [Netlify CLI](https://docs.netlify.com/cli/get-started/) e `netlify link` com o site já criado).
 - `npm test` roda os testes das regras de preço e da leitura do texto colado.

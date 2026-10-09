@@ -9,10 +9,11 @@
 // e-mails separados por vírgula. Sem ela, NINGUÉM entra — falha fechada.
 import "server-only";
 
-import { getUser, type User } from "@netlify/identity";
+import { getUser } from "@netlify/identity";
+import { MODO_LOCAL } from "@/lib/modoLocal";
 
 export type Acesso =
-  | { ok: true; usuario: User }
+  | { ok: true; email: string }
   | { ok: false; status: 401 | 403; erro: string };
 
 function emailsPermitidos(): string[] {
@@ -23,6 +24,9 @@ function emailsPermitidos(): string[] {
 }
 
 export async function verificarAcesso(): Promise<Acesso> {
+  // Só no `next dev` com a variável ligada (ver lib/modoLocal.ts).
+  if (MODO_LOCAL) return { ok: true, email: "modo-local" };
+
   const usuario = await getUser();
   if (!usuario) return { ok: false, status: 401, erro: "Faça login para continuar." };
 
@@ -37,5 +41,5 @@ export async function verificarAcesso(): Promise<Acesso> {
   if (!usuario.email || !permitidos.includes(usuario.email.toLowerCase())) {
     return { ok: false, status: 403, erro: "Esta conta não tem acesso ao painel." };
   }
-  return { ok: true, usuario };
+  return { ok: true, email: usuario.email };
 }

@@ -13,6 +13,7 @@ import { CalendarClock, ClipboardPaste, Download, ExternalLink, LogOut, RefreshC
 import { useMemo, useState } from "react";
 import { ativo, compararPorData, valorRestante, valorTotal, type Agendamento } from "@/lib/agenda";
 import { cn } from "@/lib/cn";
+import { MODO_LOCAL } from "@/lib/modoLocal";
 import { diasEntre, hojeIso, moeda, partesData } from "@/lib/formato";
 import { Botao, classesBotao } from "@/components/ui/Botao";
 import { classesEntrada } from "@/components/ui/Campo";
@@ -100,6 +101,11 @@ export default function Painel() {
 
   return (
     <div className="min-h-dvh">
+      {MODO_LOCAL && (
+        <p className="bg-aviso/15 px-4 py-1.5 text-center text-xs text-aviso">
+          Modo local: sem login, agenda salva em .dados-locais/agenda.json neste computador.
+        </p>
+      )}
       <header className="border-b border-borda">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">

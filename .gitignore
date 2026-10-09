@@ -36,3 +36,6 @@ coverage
 
 # Configuração local do Claude Code (preview etc.)
 .claude/
+
+# Modo local do painel (lib/modoLocal.ts): agenda de teste deste computador
+.dados-locais/

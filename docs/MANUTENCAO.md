@@ -85,7 +85,16 @@ blocos condicionais do montador.
   o que já foi combinado. `valorCombinado` substitui o orçado quando você fecha outro valor (ex.: com o
   deslocamento). Extras de pós-venda somam por cima.
 
-## 6. Armadilhas
+## 6. Modo local (testar sem Netlify)
+
+[lib/modoLocal.ts](../lib/modoLocal.ts): com `next dev` **e** `NEXT_PUBLIC_PAINEL_LOCAL=1`
+(em `.env.development.local`, fora do git), o `Protegido` deixa passar sem login,
+`verificarAcesso()` libera a API, e a agenda vai para `.dados-locais/agenda.json` em vez do Blobs.
+Usa-se pelo `Testar.bat`. A exigência de `NODE_ENV === "development"` é a trava: o `next build`
+sempre roda em produção, então nem uma variável esquecida no Netlify liga este modo no site publicado.
+Ao mexer em acesso ou armazenamento, mantenha os dois caminhos.
+
+## 7. Armadilhas
 
 - **Datas são texto `AAAA-MM-DD`**, nunca `Date`: `new Date("2026-12-15")` é meia-noite UTC, ou seja,
   dia 14 em Teresina. As contas usam UTC dos dois lados ([lib/formato.ts](../lib/formato.ts)).
@@ -104,7 +113,7 @@ blocos condicionais do montador.
 - **Texto livre na mensagem** (nome, local, observações) vira uma linha só, sem `[`, `]` e `*`, para não
   confundir a leitura das linhas com rótulo e da `[ref]`.
 
-## 7. Próximas fases (combinadas)
+## 8. Próximas fases (combinadas)
 
 - **Fase 2:** calendário mensal no painel; edição de preços e pacotes pelo painel (o catálogo passa a vir
   do Blobs; o código já recebe o catálogo por parâmetro); itens de pós-venda mais ricos.
