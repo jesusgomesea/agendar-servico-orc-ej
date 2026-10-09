@@ -70,7 +70,7 @@ describe("calcular", () => {
 
   it("edição avulsa soma edição e retoque", () => {
     const c = calcular({ ...selecaoVazia("edicao"), edicoes: 3, retoques: 1 }, CATALOGO);
-    expect(c.total).toBe(3 * 22 + 35);
+    expect(c.total).toBe(3 * 5 + 10);
   });
 });
 

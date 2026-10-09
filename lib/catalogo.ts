@@ -74,7 +74,8 @@ export interface Catalogo {
 }
 
 export const CATALOGO: Catalogo = {
-  versao: 1,
+  // v2 (09/10/2026): edição de foto do cliente R$22→R$5 e retoque pesado R$35→R$10.
+  versao: 2,
   contato: {
     nome: "Eluan Jesus Fotografia",
     // Formato internacional sem símbolos, exigido pelo link wa.me.
@@ -124,8 +125,8 @@ export const CATALOGO: Catalogo = {
   // (não só as que passam de 10).
   fotoExtra: { preco: 13, precoVolume: 11, volumeMin: 10 },
   fotoBruta: { preco: 5, minimo: 20 },
-  edicaoCliente: 22,
-  retoquePesado: 35,
+  edicaoCliente: 5,
+  retoquePesado: 10,
   entregas: [
     { id: "padrao", nome: "Prazo padrão", detalhe: "até 10 dias", preco: 0 },
     { id: "6d", nome: "Expressa 6 dias", detalhe: "até 6 dias", preco: 60 },
