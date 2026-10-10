@@ -31,7 +31,7 @@ export default function Inicio() {
 
       <Montador />
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-16 md:grid-cols-3">
+      <section className={`mx-auto grid max-w-6xl gap-4 px-4 pb-16 ${cat.cobrarSinal ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Incluso em todos os pacotes</h2>
           <ul className="mt-3 flex flex-col gap-1.5 text-sm text-suave">
@@ -40,6 +40,7 @@ export default function Inicio() {
             ))}
           </ul>
         </div>
+        {cat.cobrarSinal && (
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Sinal para reservar</h2>
           <ul className="mt-3 flex flex-col gap-1.5 text-sm text-suave">
@@ -57,6 +58,7 @@ export default function Inicio() {
           </ul>
           <p className="mt-3 text-xs text-fraco">O restante é acertado como combinarmos na conversa.</p>
         </div>
+        )}
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Bom saber</h2>
           <dl className="mt-3 flex flex-col gap-2.5 text-sm">

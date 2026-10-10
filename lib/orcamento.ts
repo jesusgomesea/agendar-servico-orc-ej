@@ -317,10 +317,11 @@ export function gerarMensagem(m: Mensagem, cat: Catalogo): string {
   const temCombinar = calc.linhas.some((x) => x.tipo === "aCombinar");
   const prefixo = calc.linhas.some((x) => x.tipo === "aPartirDe") ? "a partir de " : "";
   l.push(`*Total:* ${prefixo}${moeda(calc.total)}${temCombinar ? " + itens a combinar" : ""}`);
-  if (c.data) {
+  // Sinal só entra na mensagem quando está ligado no catálogo (CATALOGO.cobrarSinal).
+  if (cat.cobrarSinal && c.data) {
     const pct = percentualSinal(m.emitidoEm, c.data, cat);
     l.push(`*Sinal (${pct}%):* ${moeda(valorSinal(calc.total, pct))} — reserva a data`);
-  } else {
+  } else if (cat.cobrarSinal) {
     l.push("*Sinal:* definido quando a data for confirmada");
   }
   l.push(`Válido até ${dataBR(somarDias(m.emitidoEm, cat.validadeDias))}`);

@@ -3,7 +3,7 @@
 Site com duas partes:
 
 - **Montador público (`/`)**: o cliente escolhe o serviço (ensaio, evento, fotógrafo auxiliar ou edição),
-  o pacote e os extras, vê o valor e o sinal na hora e envia o orçamento pronto pelo WhatsApp.
+  o pacote e os extras, vê o valor na hora e envia o orçamento pronto pelo WhatsApp.
 - **Painel (`/painel`, com login)**: você cola a mensagem recebida no WhatsApp e ela vira um agendamento,
   com etapas (Recebido → Confirmado → Sinal pago → Realizado → Prévia enviada → Entregue), valores,
   pagamentos e notas.
@@ -20,11 +20,14 @@ de dados nem serviço pago à parte.
    com o código (`EJ-XXXXX`) e uma linha `[ref …]` no final.
 3. No painel, toque em **Colar orçamento** e cole a mensagem inteira. O painel lê o texto, **refaz a
    conta pela tabela de preços** e avisa se o cliente alterou o total antes de enviar.
-4. Toque em **Criar agendamento**. Depois é só ir mudando a etapa, registrar o sinal e os pagamentos.
+4. Toque em **Criar agendamento**. Depois é só ir mudando a etapa, registrar os pagamentos.
 
 O botão **Cópia** no painel baixa a agenda inteira em JSON. Vale guardar uma cópia de vez em quando.
 
 ## Mudar preços
+
+**Sinal:** está desligado por enquanto. Para voltar a cobrar, troque `COBRAR_SINAL` para `true` em
+[lib/catalogo.ts](lib/catalogo.ts). As faixas de 20/35/50% continuam guardadas lá.
 
 Os valores estão todos em [lib/catalogo.ts](lib/catalogo.ts). Ao mudar qualquer preço, **aumente
 `versao`** no topo do catálogo. Assim o painel avisa quando alguém mandar um orçamento feito com a

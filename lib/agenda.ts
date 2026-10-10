@@ -9,7 +9,7 @@ import { calcular, type LeituraOrcamento, type Linha, nomeServico, percentualSin
 
 export const ETAPAS = [
   { id: "recebido", nome: "Recebido", descricao: "Orçamento chegou, falta confirmar data" },
-  { id: "confirmado", nome: "Confirmado", descricao: "Data combinada, aguardando sinal" },
+  { id: "confirmado", nome: "Confirmado", descricao: "Data combinada com o cliente" },
   { id: "sinal_pago", nome: "Sinal pago", descricao: "Data reservada" },
   { id: "realizado", nome: "Realizado", descricao: "Sessão feita, em edição" },
   { id: "previa_enviada", nome: "Prévia enviada", descricao: "Prévia de 3–5 fotos entregue" },
@@ -100,7 +100,7 @@ export function criarDeLeitura(l: LeituraOrcamento, cat: Catalogo, agora = new D
     totalOrcado: calculo.total,
     totalEhMinimo: calculo.totalEhMinimo,
     valorCombinado: null,
-    sinalPercentual: cliente.data ? percentualSinal(ref.emitidoEm, cliente.data, cat) : null,
+    sinalPercentual: cat.cobrarSinal && cliente.data ? percentualSinal(ref.emitidoEm, cliente.data, cat) : null,
     extras: [],
     pagamentos: [],
   };

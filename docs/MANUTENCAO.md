@@ -21,7 +21,8 @@ por [lib/orcamento.test.ts](../lib/orcamento.test.ts).
 | Hora extra: ensaio R$60 / evento R$90 | `Categoria.horaExtra` |
 | Deslocamento acima de 10 km: "a combinar", fora do total | `OpcaoDeslocamento.aCombinar` → linha `tipo: "aCombinar"` |
 | Fotógrafo auxiliar: "a partir de R$100" por diária | linha `tipo: "aPartirDe"` |
-| Sinal: 20% com 60+ dias · 35% com 15–59 · 50% com menos de 15 | `CATALOGO.sinal` + `percentualSinal()` |
+| **Sinal desligado por enquanto** (10/10/2026): some do site, da mensagem e do painel | `COBRAR_SINAL` em `catalogo.ts` → `CATALOGO.cobrarSinal` |
+| Sinal (quando ligado): 20% com 60+ dias · 35% com 15–59 · 50% com menos de 15 | `CATALOGO.sinal` + `percentualSinal()` |
 | Sinal é contado da **data do orçamento** (`emitidoEm`) até a data do serviço | idem; ao mudar a data no painel, recalcula com o mesmo `emitidoEm` |
 | Validade do orçamento: 7 dias | `CATALOGO.validadeDias` |
 | Remarcação R$45 / reedição R$18 | texto em `politicas` + atalhos `EXTRAS_RAPIDOS` no detalhe |

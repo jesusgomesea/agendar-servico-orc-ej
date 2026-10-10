@@ -1,4 +1,4 @@
-// Resumo do orçamento ao lado do montador: itens, total, sinal e o botão de enviar.
+// Resumo do orçamento ao lado do montador: itens, total, sinal (se ligado no catálogo) e o botão de enviar.
 //
 // "Enviar pelo WhatsApp" gera um código novo a cada clique e abre o wa.me com a
 // mensagem pronta (gerarMensagem). Há também "Copiar mensagem" porque, em alguns
@@ -42,7 +42,7 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
 
   const temCombinar = calculo.linhas.some((l) => l.tipo === "aCombinar");
   const aPartirDe = calculo.linhas.some((l) => l.tipo === "aPartirDe");
-  const pct = cliente.data ? percentualSinal(hoje, cliente.data, cat) : null;
+  const pct = cat.cobrarSinal && cliente.data ? percentualSinal(hoje, cliente.data, cat) : null;
 
   const montarTexto = () => gerarMensagem({ codigo: novoCodigo(), emitidoEm: hoje, selecao, cliente }, cat);
 
@@ -96,6 +96,7 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
         </div>
         {temCombinar && <p className="mt-1 text-right text-xs text-fraco">+ deslocamento a combinar</p>}
 
+        {cat.cobrarSinal && (
         <div className="mt-4 rounded-lg bg-superficie-2 px-3 py-2.5 text-sm">
           {pct !== null && cliente.data >= hoje ? (
             <p>
@@ -118,6 +119,7 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
             </p>
           )}
         </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 border-t border-borda px-5 py-4">
@@ -137,7 +139,7 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
           Copiar mensagem
         </Botao>
         <p className="text-center text-xs text-fraco">
-          Orçamento válido por {cat.validadeDias} dias. A data só é garantida após a confirmação e o sinal.
+          Orçamento válido por {cat.validadeDias} dias. A data só é garantida após a {cat.cobrarSinal ? "confirmação e o sinal" : "minha confirmação"}.
         </p>
       </div>
     </div>

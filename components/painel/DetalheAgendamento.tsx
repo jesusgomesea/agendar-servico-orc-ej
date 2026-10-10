@@ -62,7 +62,7 @@ export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, ao
   const salvar = async () => {
     const final = { ...a, atualizadoEm: new Date().toISOString() };
     // Data mudou: o percentual do sinal segue a antecedência entre o orçamento e a nova data.
-    if (final.data !== agendamento.data) {
+    if (CATALOGO.cobrarSinal && final.data !== agendamento.data) {
       final.sinalPercentual = final.data ? percentualSinal(final.emitidoEm, final.data, CATALOGO) : null;
     }
     // Mudança de etapa já registrou o histórico em mudarStatus; aqui só grava.
@@ -83,7 +83,7 @@ export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, ao
     const sugestao = a.pagamentos.length === 0 && sinal !== null ? sinal : valorRestante(a);
     mudar("pagamentos", [
       ...a.pagamentos,
-      { id: novoId(), data: hojeIso(), valor: sugestao, descricao: a.pagamentos.length === 0 ? "Sinal" : "Pagamento" },
+      { id: novoId(), data: hojeIso(), valor: sugestao, descricao: a.pagamentos.length === 0 && sinal !== null ? "Sinal" : "Pagamento" },
     ]);
   };
 
@@ -241,11 +241,11 @@ export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, ao
             vazio="Nenhum pagamento registrado."
             aoMudar={(pagamentos) => mudar("pagamentos", pagamentos as Agendamento["pagamentos"])}
             comData
-            placeholder="Sinal, restante…"
+            placeholder="Entrada, restante…"
           />
-          <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <dl className={cn("mt-4 grid gap-3", CATALOGO.cobrarSinal ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
             <Numero rotulo="Total" valor={moeda(valorTotal(a))} />
-            <Numero rotulo={sinal !== null ? `Sinal (${a.sinalPercentual}%)` : "Sinal"} valor={sinal !== null ? moeda(sinal) : "sem data"} />
+            {CATALOGO.cobrarSinal && <Numero rotulo={sinal !== null ? `Sinal (${a.sinalPercentual}%)` : "Sinal"} valor={sinal !== null ? moeda(sinal) : "sem data"} />}
             <Numero rotulo="Pago" valor={moeda(valorPago(a))} />
             <Numero rotulo="Restante" valor={moeda(valorRestante(a))} destaque={valorRestante(a) > 0} />
           </dl>

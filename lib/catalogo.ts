@@ -66,12 +66,21 @@ export interface Catalogo {
   entregas: OpcaoEntrega[];
   deslocamentos: OpcaoDeslocamento[];
   auxiliar: { aPartirDe: number; observacao: string };
+  /**
+   * Liga/desliga o sinal no site, na mensagem do WhatsApp e no painel. Desligado,
+   * as faixas abaixo ficam guardadas mas não aparecem nem entram em conta.
+   */
+  cobrarSinal: boolean;
   /** Ordenadas da maior antecedência para a menor; a última deve ter diasMin 0. */
   sinal: FaixaSinal[];
   validadeDias: number;
   incluso: string[];
   politicas: { titulo: string; texto: string }[];
 }
+
+// Desligado em 10/10/2026 a pedido: "no sinal, não precisa inicialmente".
+// Para voltar a cobrar, troque para true — as faixas (20/35/50%) continuam abaixo.
+const COBRAR_SINAL = false;
 
 export const CATALOGO: Catalogo = {
   // v2 (09/10/2026): edição de foto do cliente R$22→R$5 e retoque pesado R$35→R$10.
@@ -141,6 +150,7 @@ export const CATALOGO: Catalogo = {
     aPartirDe: 100,
     observacao: "Valor final depende de locomoção, equipamentos e duração.",
   },
+  cobrarSinal: COBRAR_SINAL,
   sinal: [
     { diasMin: 60, percentual: 20 },
     { diasMin: 15, percentual: 35 },
@@ -158,6 +168,6 @@ export const CATALOGO: Catalogo = {
     { titulo: "Remarcação", texto: "A 2ª remarcação, ou qualquer remarcação com menos de 48h, tem taxa de R$45." },
     { titulo: "Reedição", texto: "Ajustes fora da rodada incluída ou do combinado: R$18 por foto." },
     { titulo: "Entrega expressa", texto: "Sujeita à agenda da semana; confirmo a disponibilidade na conversa." },
-    { titulo: "Sinal", texto: "A data só fica reservada após o pagamento do sinal." },
+    ...(COBRAR_SINAL ? [{ titulo: "Sinal", texto: "A data só fica reservada após o pagamento do sinal." }] : []),
   ],
 };

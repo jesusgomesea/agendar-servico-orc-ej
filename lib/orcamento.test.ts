@@ -117,12 +117,18 @@ describe("mensagem do WhatsApp → painel", () => {
   const selecao = { ...selecaoVazia("evento"), pacoteId: "ev-curta", horasExtras: 1, entregaId: "4d" };
   const texto = gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao, cliente }, CATALOGO);
 
-  it("monta o texto com total e sinal pela antecedência", () => {
+  it("monta o texto com total, sem sinal enquanto ele estiver desligado no catálogo", () => {
     expect(texto).toContain("*Total:* R$ 530,00");
-    expect(texto).toContain("*Sinal (20%):* R$ 106,00");
+    expect(texto).not.toContain("Sinal");
     expect(texto).toContain("Válido até 16/10/2026");
     // Quebra de linha e colchetes das observações não podem quebrar a leitura.
     expect(texto).toContain("*Observações:* Aniversário de 1 ano com tema safari");
+  });
+
+  it("com o sinal ligado, informa o sinal pela antecedência", () => {
+    const comSinal = { ...CATALOGO, cobrarSinal: true };
+    const t = gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao, cliente }, comSinal);
+    expect(t).toContain("*Sinal (20%):* R$ 106,00");
   });
 
   it("o painel lê de volta os dados do cliente e o valor, sem avisos", () => {
