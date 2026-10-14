@@ -86,6 +86,10 @@ blocos condicionais do montador.
 - **O Blobs repete calado as chamadas que falham** (5xx, 429, 403, erro de rede; até 5 vezes, 5 s entre
   elas). Um erro do Blobs parece "travou". Por isso o `fetch` passado a ele anota status e host da última
   resposta (`ultimaTentativaBlobs()`), e a mensagem de erro do painel mostra esse dado.
+- **`res.body.cancel()` nunca termina no Netlify.** O Blobs chama isso para descartar o corpo do 404
+  (agenda ainda não existe), do 412 (conflito) e de toda gravação. Já travou a primeira leitura e as
+  gravações (502). `semCorpoSeDescartavel()` entrega ao Blobs essas respostas sem corpo. Só o GET 200
+  mantém o corpo. Não remova ao atualizar o `@netlify/blobs` sem testar a agenda vazia no Netlify.
 - **Falha no servidor não derruba a função:** `/api/agenda` responde 500 com a causa na mensagem (aparece
   no painel) e registra o detalhe nos logs da função (**Logs → Functions** no Netlify). Cada etapa de
   rede (login no Identity, leitura e gravação no Blobs) tem limite de 3 s (`comLimite`), e a soma fica

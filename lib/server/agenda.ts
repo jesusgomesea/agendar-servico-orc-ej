@@ -60,14 +60,29 @@ const fetchOriginal: typeof fetch = async (url, init) => {
   try {
     const r = await base(url, init);
     ultimaTentativa = `HTTP ${r.status} de ${host}`;
-    if (!r.ok) console.warn(`[agenda] Blobs respondeu ${ultimaTentativa}`);
-    return r;
+    if (!r.ok && r.status !== 404) console.warn(`[agenda] Blobs respondeu ${ultimaTentativa}`);
+    return semCorpoSeDescartavel(r, (init?.method ?? "GET").toUpperCase());
   } catch (e) {
     ultimaTentativa = `erro de rede com ${host}: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`.slice(0, 200);
     console.warn(`[agenda] Blobs: ${ultimaTentativa}`);
     throw e;
   }
 };
+
+/**
+ * O Blobs descarta o corpo das respostas que não lê (404 = agenda ainda não
+ * existe, 412 = conflito, e toda gravação) com `res.body.cancel()`, e no
+ * Netlify essa chamada NUNCA termina: a leitura da agenda vazia e as gravações
+ * ficavam presas até a função ser cortada (502). Só a leitura com sucesso usa o
+ * corpo; nas outras, entregamos uma resposta sem corpo (mesmo status e
+ * cabeçalhos, que é o que o Blobs consulta) e liberamos o original sem esperar.
+ */
+function semCorpoSeDescartavel(r: Response, metodo: string): Response {
+  const usaCorpo = metodo === "GET" && r.status === 200;
+  if (usaCorpo || !r.body) return r;
+  r.body.cancel().catch(() => {});
+  return new Response(null, { status: r.status, statusText: r.statusText, headers: r.headers });
+}
 
 /**
  * `strong` porque o painel grava e relê em sequência: com a consistência
