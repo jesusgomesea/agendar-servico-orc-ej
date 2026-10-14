@@ -23,15 +23,22 @@ export function useAgenda() {
   const carregar = useCallback(async () => {
     setCarga((c) => ({ ...c, carregando: true }));
     try {
-      const r = await fetch("/api/agenda", { cache: "no-store" });
+      // Limite de tempo: sem ele, um servidor que não responde deixava o painel
+      // "carregando" para sempre, com "Colar orçamento" desabilitado e sem erro.
+      const r = await fetch("/api/agenda", { cache: "no-store", signal: AbortSignal.timeout(20_000) });
       const corpo = await r.json().catch(() => ({}));
       if (!r.ok) {
         setCarga({ estado: null, carregando: false, erro: corpo.erro ?? `Erro ${r.status} ao carregar a agenda.` });
         return;
       }
       setCarga({ estado: corpo as EstadoAgenda, carregando: false, erro: null });
-    } catch {
-      setCarga({ estado: null, carregando: false, erro: "Sem conexão com o servidor." });
+    } catch (e) {
+      const tempoEsgotado = e instanceof DOMException && e.name === "TimeoutError";
+      setCarga({
+        estado: null,
+        carregando: false,
+        erro: tempoEsgotado ? "O servidor demorou demais para responder. Tente de novo." : "Sem conexão com o servidor.",
+      });
     }
   }, []);
 

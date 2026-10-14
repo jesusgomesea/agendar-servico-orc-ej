@@ -6,7 +6,7 @@
 "use client";
 
 import { AlertTriangle, ClipboardPaste } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { criarDeLeitura, type Agendamento } from "@/lib/agenda";
 import { CATALOGO } from "@/lib/catalogo";
 import { dataBR, moeda } from "@/lib/formato";
@@ -25,21 +25,33 @@ interface Props {
 export default function ColarOrcamento({ aberto, aoFechar, existentes, aoCriar }: Props) {
   const [texto, setTexto] = useState("");
   const [criando, setCriando] = useState(false);
+  // Aviso quando o botão "Colar" não consegue ler a área de transferência.
+  const [avisoColar, setAvisoColar] = useState("");
+  const campoTexto = useRef<HTMLTextAreaElement>(null);
   const resultado = useMemo(() => (texto.trim() ? lerTextoColado(texto, CATALOGO) : null), [texto]);
 
   const duplicado = resultado?.ok ? existentes.find((a) => a.codigo === resultado.leitura.referencia.codigo) : undefined;
 
   const fechar = () => {
     setTexto("");
+    setAvisoColar("");
     aoFechar();
   };
 
+  // Celulares costumam negar a leitura (permissão recusada, ou navegador sem
+  // suporte). Antes o erro era engolido: a caixa ficava vazia e "Criar
+  // agendamento" desabilitado sem explicação. Agora avisa e foca o campo para
+  // colar à mão.
   const colarDaAreaDeTransferencia = async () => {
+    setAvisoColar("");
     try {
-      setTexto(await navigator.clipboard.readText());
+      const lido = (await navigator.clipboard?.readText?.()) ?? "";
+      if (lido.trim()) return setTexto(lido);
+      setAvisoColar("A área de transferência está vazia. Copie a mensagem do cliente no WhatsApp e tente de novo.");
     } catch {
-      // Navegador não deixou ler: a pessoa cola com Ctrl+V no campo.
+      setAvisoColar("O navegador não deixou colar pelo botão. Toque e segure dentro da caixa e escolha “Colar” (no computador, Ctrl+V).");
     }
+    campoTexto.current?.focus();
   };
 
   const criar = async () => {
@@ -71,9 +83,13 @@ export default function ColarOrcamento({ aberto, aoFechar, existentes, aoCriar }
       <div className="flex flex-col gap-4">
         <div className="relative">
           <textarea
+            ref={campoTexto}
             aria-label="Mensagem do cliente"
             value={texto}
-            onChange={(e) => setTexto(e.target.value)}
+            onChange={(e) => {
+              setTexto(e.target.value);
+              setAvisoColar("");
+            }}
             placeholder="📸 Orçamento EJ-XXXXX — Eluan Jesus Fotografia…"
             className={`${classesEntrada} min-h-40 w-full py-3 font-mono text-xs`}
             autoFocus
@@ -84,6 +100,12 @@ export default function ColarOrcamento({ aberto, aoFechar, existentes, aoCriar }
             </Botao>
           )}
         </div>
+
+        {avisoColar && !texto && (
+          <p role="status" className="rounded-lg border border-aviso/40 bg-aviso/5 px-3 py-2.5 text-sm text-aviso">
+            {avisoColar}
+          </p>
+        )}
 
         {resultado && !resultado.ok && (
           <p role="alert" className="rounded-lg border border-erro/40 bg-erro/5 px-3 py-2.5 text-sm text-erro">

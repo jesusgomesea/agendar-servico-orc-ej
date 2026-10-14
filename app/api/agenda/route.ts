@@ -13,13 +13,28 @@ import { gravarAgendaSeIgual, lerAgenda } from "@/lib/server/agenda";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Falha de armazenamento (Blobs fora do ar, ambiente sem Blobs…) vira um 500 com
+ * a causa na mensagem, em vez de derrubar a função (o Netlify devolvia 502 sem
+ * explicação). O detalhe completo fica nos logs da função.
+ */
+function falhaDeArmazenamento(e: unknown) {
+  console.error("[agenda] falha no armazenamento:", e);
+  const causa = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  return Response.json({ erro: `Não foi possível acessar a agenda no servidor (${causa}).` }, { status: 500 });
+}
+
 const LIMITE_BYTES = 4 * 1024 * 1024;
 
 export async function GET() {
   const acesso = await verificarAcesso();
   if (!acesso.ok) return Response.json({ erro: acesso.erro }, { status: acesso.status });
-  const { estado } = await lerAgenda();
-  return Response.json(estado, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const { estado } = await lerAgenda();
+    return Response.json(estado, { headers: { "Cache-Control": "no-store" } });
+  } catch (e) {
+    return falhaDeArmazenamento(e);
+  }
 }
 
 export async function PUT(req: Request) {
@@ -39,15 +54,19 @@ export async function PUT(req: Request) {
   }
   if (!estadoValido(corpo)) return Response.json({ erro: "Formato de agenda inválido." }, { status: 400 });
 
-  const { estado: atual, etag } = await lerAgenda();
-  const conflito = () =>
-    Response.json(
-      { erro: "A agenda foi alterada em outro aparelho. Recarregue para ver a versão mais nova." },
-      { status: 409 },
-    );
-  if (corpo.versaoBase !== atual.versao) return conflito();
+  try {
+    const { estado: atual, etag } = await lerAgenda();
+    const conflito = () =>
+      Response.json(
+        { erro: "A agenda foi alterada em outro aparelho. Recarregue para ver a versão mais nova." },
+        { status: 409 },
+      );
+    if (corpo.versaoBase !== atual.versao) return conflito();
 
-  const novo = { versao: atual.versao + 1, agendamentos: corpo.agendamentos };
-  if (!(await gravarAgendaSeIgual(novo, etag))) return conflito();
-  return Response.json(novo);
+    const novo = { versao: atual.versao + 1, agendamentos: corpo.agendamentos };
+    if (!(await gravarAgendaSeIgual(novo, etag))) return conflito();
+    return Response.json(novo);
+  } catch (e) {
+    return falhaDeArmazenamento(e);
+  }
 }

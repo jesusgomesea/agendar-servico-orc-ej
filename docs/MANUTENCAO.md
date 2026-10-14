@@ -78,7 +78,11 @@ blocos condicionais do montador.
   Se outro aparelho gravou antes, a resposta é 409 e o painel recarrega. Comparar só o número da versão
   deixaria uma janela entre ler e gravar.
 - **Consistência `strong`** no Blobs: sem ela, recarregar logo após salvar pode mostrar o estado antigo,
-  e a gravação seguinte cai em conflito.
+  e a gravação seguinte cai em conflito. Se a função chegar sem suporte à leitura forte
+  (`BlobsConsistencyError`, já derrubou o GET com 502), `lerDoBlob()` cai para a leitura eventual; a
+  gravação segue protegida pelo etag.
+- **Falha no Blobs não derruba a função:** `/api/agenda` responde 500 com a causa na mensagem (aparece
+  no painel) e registra o detalhe nos logs da função (**Logs → Functions** no Netlify).
 - **Acesso:** [lib/server/acesso.ts](../lib/server/acesso.ts) exige login no Identity **e** e-mail
   em `EMAILS_PAINEL`. Sem a variável, ninguém entra (falha fechada). Assim, deixar o Identity em "Open"
   por engano não expõe nomes e telefones de clientes.
@@ -102,6 +106,9 @@ Ao mexer em acesso ou armazenamento, mantenha os dois caminhos.
 - **Classes Tailwind conflitantes** (`w-full` + `w-28`): sem tailwind-merge, quem vence é a ordem do
   CSS gerado, não a ordem na string. Por isso `classesEntrada` não fixa largura, e altura forçada usa
   `h-11!`. Já deu bug: o campo de descrição do pagamento ficou espremido.
+- **Botão "Colar" do painel:** celulares costumam negar `navigator.clipboard.readText()`. O erro não
+  pode ser engolido em silêncio (a caixa ficava vazia e "Criar agendamento" desabilitado sem
+  explicação): o painel avisa para colar à mão.
 - **Rascunho do montador**: a gravação no localStorage só começa depois de restaurar (estado
   `restaurado`). Com `useRef`, o modo de desenvolvimento (efeitos rodando duas vezes) apagava o rascunho.
 - **Depois de login, logout ou troca de senha, use navegação completa** (`window.location.href`), nunca

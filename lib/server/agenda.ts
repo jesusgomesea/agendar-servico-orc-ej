@@ -39,8 +39,24 @@ const CHAVE = "agenda.json";
  * eventual do edge, recarregar logo após salvar poderia mostrar o estado antigo
  * — e a checagem de versão recusaria a gravação seguinte.
  */
-function store() {
-  return getStore({ name: NOME_DA_STORE, consistency: "strong" });
+function store(consistency: "strong" | "eventual" = "strong") {
+  return getStore({ name: NOME_DA_STORE, consistency });
+}
+
+/**
+ * Leitura com fallback: no runtime do Next no Netlify a função pode chegar sem o
+ * `uncachedEdgeURL` que a leitura forte exige (BlobsConsistencyError — derrubava
+ * o GET com 502). Aí lê com consistência eventual. A gravação continua segura:
+ * `onlyIfMatch` com o etag recusa sobrescrever, no pior caso vira um 409.
+ */
+async function lerDoBlob() {
+  try {
+    return await store("strong").getWithMetadata(CHAVE, { type: "json" });
+  } catch (e) {
+    if (!(e instanceof Error && e.name === "BlobsConsistencyError")) throw e;
+    console.warn("[agenda] leitura forte indisponível no Blobs; usando consistência eventual.");
+    return store("eventual").getWithMetadata(CHAVE, { type: "json" });
+  }
 }
 
 export interface AgendaLida {
@@ -51,7 +67,7 @@ export interface AgendaLida {
 
 export async function lerAgenda(): Promise<AgendaLida> {
   if (MODO_LOCAL) return lerLocal();
-  const r = await store().getWithMetadata(CHAVE, { type: "json" });
+  const r = await lerDoBlob();
   if (!r) return { estado: { versao: 0, agendamentos: [] }, etag: undefined };
   return { estado: r.data as EstadoAgenda, etag: r.etag };
 }
