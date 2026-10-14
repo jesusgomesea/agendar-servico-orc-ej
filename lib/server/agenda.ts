@@ -35,27 +35,48 @@ const NOME_DA_STORE = "ej-fotografia";
 const CHAVE = "agenda.json";
 
 /**
+ * O `fetch` original, sem a camada de cache que o Next.js põe por cima do global
+ * (ele guarda o original em `_nextOriginalFetch`). O Blobs usa o `fetch` global
+ * por padrão e, no Netlify, a leitura travava até a função ser cortada (502).
+ */
+// Resolvido a cada chamada: o Next pode trocar o `fetch` global depois que este módulo carregou.
+const fetchOriginal: typeof fetch = (url, init) =>
+  ((globalThis.fetch as typeof fetch & { _nextOriginalFetch?: typeof fetch })._nextOriginalFetch ?? globalThis.fetch)(url, init);
+
+/**
  * `strong` porque o painel grava e relê em sequência: com a consistência
  * eventual do edge, recarregar logo após salvar poderia mostrar o estado antigo
  * — e a checagem de versão recusaria a gravação seguinte.
  */
 function store(consistency: "strong" | "eventual" = "strong") {
-  return getStore({ name: NOME_DA_STORE, consistency });
+  return getStore({ name: NOME_DA_STORE, consistency, fetch: fetchOriginal });
 }
 
+/** Leitura forte que não responder neste tempo cede lugar à eventual. */
+const LIMITE_LEITURA_FORTE_MS = 1_200;
+
 /**
- * Leitura com fallback: no runtime do Next no Netlify a função pode chegar sem o
- * `uncachedEdgeURL` que a leitura forte exige (BlobsConsistencyError — derrubava
- * o GET com 502). Aí lê com consistência eventual. A gravação continua segura:
- * `onlyIfMatch` com o etag recusa sobrescrever, no pior caso vira um 409.
+ * Leitura com plano B: tenta a forte; se ela falhar por falta de configuração
+ * (BlobsConsistencyError) ou não responder a tempo, lê com consistência
+ * eventual. A gravação continua segura: `onlyIfMatch` com o etag recusa
+ * sobrescrever, no pior caso vira um 409 e o painel recarrega.
  */
 async function lerDoBlob() {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await store("strong").getWithMetadata(CHAVE, { type: "json" });
+    return await Promise.race([
+      store("strong").getWithMetadata(CHAVE, { type: "json" }),
+      new Promise<never>((_, rejeitar) => {
+        relogio = setTimeout(() => rejeitar(new Error("LeituraForteLenta")), LIMITE_LEITURA_FORTE_MS);
+      }),
+    ]);
   } catch (e) {
-    if (!(e instanceof Error && e.name === "BlobsConsistencyError")) throw e;
-    console.warn("[agenda] leitura forte indisponível no Blobs; usando consistência eventual.");
+    const motivo = e instanceof Error ? e.name === "BlobsConsistencyError" || e.message === "LeituraForteLenta" : false;
+    if (!motivo) throw e;
+    console.warn(`[agenda] leitura forte indisponível (${(e as Error).message.slice(0, 60)}); usando consistência eventual.`);
     return store("eventual").getWithMetadata(CHAVE, { type: "json" });
+  } finally {
+    clearTimeout(relogio);
   }
 }
 

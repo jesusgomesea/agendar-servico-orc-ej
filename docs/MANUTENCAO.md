@@ -79,8 +79,10 @@ blocos condicionais do montador.
   deixaria uma janela entre ler e gravar.
 - **Consistência `strong`** no Blobs: sem ela, recarregar logo após salvar pode mostrar o estado antigo,
   e a gravação seguinte cai em conflito. Se a função chegar sem suporte à leitura forte
-  (`BlobsConsistencyError`, já derrubou o GET com 502), `lerDoBlob()` cai para a leitura eventual; a
+  (`BlobsConsistencyError`) ou ela não responder em 1,2 s, `lerDoBlob()` cai para a leitura eventual; a
   gravação segue protegida pelo etag.
+- **O Blobs usa o `fetch` original**, não o que o Next.js põe por cima do global (`_nextOriginalFetch`).
+  No Netlify, a leitura com o `fetch` do Next travava até a função ser cortada (502).
 - **Falha no servidor não derruba a função:** `/api/agenda` responde 500 com a causa na mensagem (aparece
   no painel) e registra o detalhe nos logs da função (**Logs → Functions** no Netlify). Cada etapa de
   rede (login no Identity, leitura e gravação no Blobs) tem limite de 3 s (`comLimite`), e a soma fica
