@@ -39,9 +39,35 @@ const CHAVE = "agenda.json";
  * (ele guarda o original em `_nextOriginalFetch`). O Blobs usa o `fetch` global
  * por padrão e, no Netlify, a leitura travava até a função ser cortada (502).
  */
+/**
+ * Resposta da última chamada ao Blobs, para diagnóstico. O Blobs repete em
+ * silêncio as chamadas que falham (5xx, 429, 403, erro de rede), esperando
+ * segundos entre as tentativas: sem isto, o painel só via "não respondeu" e a
+ * causa real ficava escondida. Guarda só status e host, nunca URL nem token.
+ */
+let ultimaTentativa = "nenhuma chamada feita";
+export function ultimaTentativaBlobs() {
+  return ultimaTentativa;
+}
+
 // Resolvido a cada chamada: o Next pode trocar o `fetch` global depois que este módulo carregou.
-const fetchOriginal: typeof fetch = (url, init) =>
-  ((globalThis.fetch as typeof fetch & { _nextOriginalFetch?: typeof fetch })._nextOriginalFetch ?? globalThis.fetch)(url, init);
+const fetchOriginal: typeof fetch = async (url, init) => {
+  const base = (globalThis.fetch as typeof fetch & { _nextOriginalFetch?: typeof fetch })._nextOriginalFetch ?? globalThis.fetch;
+  let host = "?";
+  try {
+    host = new URL(url instanceof Request ? url.url : String(url)).host;
+  } catch {}
+  try {
+    const r = await base(url, init);
+    ultimaTentativa = `HTTP ${r.status} de ${host}`;
+    if (!r.ok) console.warn(`[agenda] Blobs respondeu ${ultimaTentativa}`);
+    return r;
+  } catch (e) {
+    ultimaTentativa = `erro de rede com ${host}: ${e instanceof Error ? `${e.name} ${e.message}` : String(e)}`.slice(0, 200);
+    console.warn(`[agenda] Blobs: ${ultimaTentativa}`);
+    throw e;
+  }
+};
 
 /**
  * `strong` porque o painel grava e relê em sequência: com a consistência

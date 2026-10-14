@@ -9,7 +9,7 @@
 // — em vez de uma aba apagar silenciosamente o que a outra salvou.
 import { estadoValido } from "@/lib/agenda";
 import { verificarAcesso } from "@/lib/server/acesso";
-import { gravarAgendaSeIgual, lerAgenda } from "@/lib/server/agenda";
+import { gravarAgendaSeIgual, lerAgenda, ultimaTentativaBlobs } from "@/lib/server/agenda";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,7 @@ function falhaNoServidor(e: unknown) {
   // Só diz SE a configuração do Blobs chegou à função (nunca o conteúdo, que tem token).
   const blobs = (globalThis as { netlifyBlobsContext?: unknown }).netlifyBlobsContext || process.env.NETLIFY_BLOBS_CONTEXT;
   return Response.json(
-    { erro: `Não foi possível acessar a agenda no servidor (${causa}; config. do Blobs ${blobs ? "presente" : "ausente"}).` },
+    { erro: `Não foi possível acessar a agenda no servidor (${causa}; config. do Blobs ${blobs ? "presente" : "ausente"}; última resposta do Blobs: ${ultimaTentativaBlobs()}).` },
     { status: 500 },
   );
 }
