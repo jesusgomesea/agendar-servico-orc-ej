@@ -4,6 +4,7 @@ Montador de orçamento público + painel de agendamentos de um fotógrafo de Ter
 Router) + React 19 + TypeScript + Tailwind v4, no Netlify (Identity para login, Blobs para dados).
 
 - Uso e publicação: [README.md](README.md)
+- Configurar o Netlify (Identity, Blobs, variáveis): [docs/NETLIFY.md](docs/NETLIFY.md)
 - **Antes de mudar código:** [docs/MANUTENCAO.md](docs/MANUTENCAO.md), com fluxo, regras, receitas e armadilhas
 
 ## Regras de trabalho neste repositório

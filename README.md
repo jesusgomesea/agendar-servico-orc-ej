@@ -65,6 +65,9 @@ npm run dev:next
 
 ## Publicar no Netlify (primeira vez)
 
+> Guia completo, com checklist, teste final, domínio, e-mails em português e problemas comuns:
+> [docs/NETLIFY.md](docs/NETLIFY.md). Resumo:
+
 1. Suba o repositório no GitHub e, no Netlify, **Add new project → Import from Git**. O
    [netlify.toml](netlify.toml) já define build e plugin, então não precisa preencher nada.
 2. **Project configuration → Environment variables**: crie `EMAILS_PAINEL` com o seu e-mail (se houver
