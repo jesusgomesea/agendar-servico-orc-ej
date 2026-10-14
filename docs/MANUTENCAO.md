@@ -81,8 +81,10 @@ blocos condicionais do montador.
   e a gravação seguinte cai em conflito. Se a função chegar sem suporte à leitura forte
   (`BlobsConsistencyError`, já derrubou o GET com 502), `lerDoBlob()` cai para a leitura eventual; a
   gravação segue protegida pelo etag.
-- **Falha no Blobs não derruba a função:** `/api/agenda` responde 500 com a causa na mensagem (aparece
-  no painel) e registra o detalhe nos logs da função (**Logs → Functions** no Netlify).
+- **Falha no servidor não derruba a função:** `/api/agenda` responde 500 com a causa na mensagem (aparece
+  no painel) e registra o detalhe nos logs da função (**Logs → Functions** no Netlify). Cada etapa de
+  rede (login no Identity, leitura e gravação no Blobs) tem limite de 3 s (`comLimite`), e a soma fica
+  abaixo do corte de ~10 s do Netlify. Assim a mensagem diz qual etapa travou, em vez de um 502 mudo.
 - **Acesso:** [lib/server/acesso.ts](../lib/server/acesso.ts) exige login no Identity **e** e-mail
   em `EMAILS_PAINEL`. Sem a variável, ninguém entra (falha fechada). Assim, deixar o Identity em "Open"
   por engano não expõe nomes e telefones de clientes.
