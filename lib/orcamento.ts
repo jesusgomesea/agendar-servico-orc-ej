@@ -10,16 +10,8 @@
 // O painel lê essa linha, refaz a conta com o catálogo e avisa se o total escrito
 // não bate. As linhas legíveis (Cliente, Local…) servem só para os dados pessoais.
 
-import type { Catalogo, CategoriaId } from "./catalogo";
-import {
-  dataBR,
-  dataBRparaIso,
-  dataIsoValida,
-  diasEntre,
-  lerMoeda,
-  moeda,
-  somarDias,
-} from "./formato";
+import { entregaValeNa, lancamentoVigente, precoDoPacote, type Catalogo, type CategoriaId } from "./catalogo";
+import { dataBR, dataBRparaIso, dataIsoValida, lerMoeda, moeda, somarDias } from "./formato";
 
 /** O que o cliente escolheu no montador. Quantidades zeradas = item não escolhido. */
 export interface Selecao {
@@ -49,7 +41,7 @@ export interface DadosCliente {
 /**
  * fixo       → entra no total;
  * aPartirDe  → entra no total, mas o valor real pode ser maior (fotógrafo auxiliar);
- * aCombinar  → não entra no total, é definido na conversa (deslocamento acima de 10 km).
+ * aCombinar  → não entra no total, é definido na conversa (deslocamento acima de 30 km).
  */
 export type TipoLinha = "fixo" | "aPartirDe" | "aCombinar";
 
@@ -59,6 +51,8 @@ export interface Linha {
   unitario: number;
   valor: number;
   tipo: TipoLinha;
+  /** Entrega e deslocamento: na mensagem saem nas linhas próprias, não na lista de itens. */
+  grupo?: "entrega" | "deslocamento";
 }
 
 export interface Calculo {
@@ -68,6 +62,10 @@ export interface Calculo {
   totalEhMinimo: boolean;
   /** Motivos que impedem enviar (ex.: falta escolher o pacote). Vazio = pode enviar. */
   pendencias: string[];
+  /** Sinal para reservar a data (`sinalPercentual` do total, arredondado para cima). */
+  sinal: number;
+  /** Total menos o sinal: pago até o dia do ensaio ou evento. */
+  restante: number;
 }
 
 export function selecaoVazia(categoria: CategoriaId = "ensaio"): Selecao {
@@ -91,17 +89,17 @@ export function precoFotoExtra(qtd: number, cat: Catalogo): number {
 }
 
 export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
-  const sel = normalizarSelecao(selecaoBruta);
+  const sel = normalizarSelecao(selecaoBruta, cat);
   const linhas: Linha[] = [];
   const pendencias: string[] = [];
   const categoria = cat.categorias.find((c) => c.id === sel.categoria);
   if (!categoria) {
-    return { linhas, total: 0, totalEhMinimo: false, pendencias: ["Categoria desconhecida."] };
+    return { linhas, total: 0, totalEhMinimo: false, pendencias: ["Categoria desconhecida."], sinal: 0, restante: 0 };
   }
 
-  const add = (descricao: string, quantidade: number, unitario: number, tipo: TipoLinha = "fixo") => {
+  const add = (descricao: string, quantidade: number, unitario: number, tipo: TipoLinha = "fixo", grupo?: Linha["grupo"]) => {
     if (quantidade <= 0) return;
-    linhas.push({ descricao, quantidade, unitario, valor: quantidade * unitario, tipo });
+    linhas.push({ descricao, quantidade, unitario, valor: quantidade * unitario, tipo, ...(grupo ? { grupo } : {}) });
   };
 
   if (categoria.temSessao) {
@@ -109,7 +107,10 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
     if (!pacote) {
       pendencias.push("Escolha um pacote.");
     } else {
-      add(`Pacote ${pacote.nome} (${pacote.duracao} · ${pacote.entrega})`, 1, pacote.preco);
+      // Pacote fora do montador (legado ou desativado) ainda é aceito: o painel
+      // precisa ler orçamentos antigos. Quem esconde é o montador.
+      const lancamento = lancamentoVigente(pacote) ? " · preço de lançamento" : "";
+      add(`Pacote ${pacote.nome} (${pacote.duracao} · ${pacote.entrega}${lancamento})`, 1, precoDoPacote(pacote));
     }
     if (categoria.horaExtra) add("Hora extra em campo", sel.horasExtras, categoria.horaExtra);
     add("Foto extra editada", sel.fotosExtras, precoFotoExtra(sel.fotosExtras, cat));
@@ -121,12 +122,12 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
 
     const entrega = cat.entregas.find((e) => e.id === sel.entregaId);
     if (!entrega) pendencias.push("Prazo de entrega inválido.");
-    else if (entrega.preco > 0) add(`Entrega expressa (${entrega.detalhe})`, 1, entrega.preco);
+    else if (entrega.preco > 0) add(`Entrega ${entrega.nome.toLowerCase()} (${entrega.detalhe})`, 1, entrega.preco, "fixo", "entrega");
 
     const desl = cat.deslocamentos.find((d) => d.id === sel.deslocamentoId);
     if (!desl) pendencias.push("Deslocamento inválido.");
-    else if (desl.aCombinar) add(`Deslocamento: ${desl.nome.toLowerCase()}`, 1, 0, "aCombinar");
-    else if (desl.preco > 0) add(`Deslocamento: ${desl.nome.toLowerCase()}`, 1, desl.preco);
+    else if (desl.aCombinar) add(`Deslocamento (${desl.nome})`, 1, 0, "aCombinar", "deslocamento");
+    else if (desl.preco > 0) add(`Deslocamento (${desl.nome})`, 1, desl.preco, "fixo", "deslocamento");
   }
 
   if (categoria.id === "auxiliar") {
@@ -141,18 +142,16 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
   }
 
   const total = linhas.filter((l) => l.tipo !== "aCombinar").reduce((s, l) => s + l.valor, 0);
-  return { linhas, total, totalEhMinimo: linhas.some((l) => l.tipo !== "fixo"), pendencias };
+  const sinal = valorSinal(total, cat.sinalPercentual);
+  return { linhas, total, totalEhMinimo: linhas.some((l) => l.tipo !== "fixo"), pendencias, sinal, restante: total - sinal };
 }
 
-/** Percentual de sinal pela antecedência: quanto mais longe a data, menor o sinal. */
-export function percentualSinal(emitidoEm: string, dataServico: string, cat: Catalogo): number {
-  const dias = diasEntre(emitidoEm, dataServico);
-  const faixa = cat.sinal.find((f) => dias >= f.diasMin);
-  return (faixa ?? cat.sinal[cat.sinal.length - 1]).percentual;
-}
-
+/**
+ * Sinal arredondado PARA CIMA em reais inteiros (ex.: 40% de R$ 263 = R$ 105,20 → R$ 106).
+ * O desconto de 1e-9 evita que um erro de ponto flutuante (100,0000001) suba um real à toa.
+ */
 export function valorSinal(total: number, percentual: number): number {
-  return Math.round(total * percentual) / 100;
+  return Math.max(0, Math.ceil((total * percentual) / 100 - 1e-9));
 }
 
 // ---------------------------------------------------------------------------
@@ -191,8 +190,12 @@ const CHAVES_NUMERICAS: [keyof Selecao, string][] = [
  * Zera o que não vale para a categoria. O montador guarda as escolhas de todas
  * as abas (para o cliente poder ir e voltar sem perder nada), mas só as da
  * categoria escolhida podem ir para a mensagem e para o agendamento.
+ *
+ * Com o catálogo, aplica também as regras por serviço: fotos brutas só onde a
+ * tabela permite (evento) e entrega só entre as opções do serviço (a Expressa
+ * 24h é só de evento) — escolha que não vale volta ao padrão.
  */
-export function normalizarSelecao(sel: Selecao): Selecao {
+export function normalizarSelecao(sel: Selecao, cat?: Catalogo): Selecao {
   const s = { ...sel };
   const comSessao = s.categoria === "ensaio" || s.categoria === "evento";
   if (!comSessao) {
@@ -206,6 +209,11 @@ export function normalizarSelecao(sel: Selecao): Selecao {
   if (s.categoria !== "edicao") s.edicoes = 0;
   if (s.categoria !== "auxiliar") s.diariasAuxiliar = 0;
   if (s.categoria === "auxiliar") s.retoques = 0;
+  if (cat && comSessao) {
+    if (!cat.fotoBruta.categorias.includes(s.categoria)) s.fotosBrutas = 0;
+    const entrega = cat.entregas.find((e) => e.id === s.entregaId);
+    if (entrega && !entregaValeNa(entrega, s.categoria)) s.entregaId = "padrao";
+  }
   return s;
 }
 
@@ -293,37 +301,43 @@ export function nomeServico(sel: Selecao, cat: Catalogo): string {
 
 /** Mensagem pronta para o WhatsApp. O formato das linhas com rótulo é lido de volta por `lerTextoColado`. */
 export function gerarMensagem(m: Mensagem, cat: Catalogo): string {
-  const calc = calcular(m.selecao, cat);
+  const selecao = normalizarSelecao(m.selecao, cat);
+  const calc = calcular(selecao, cat);
   const c = m.cliente;
   const l: string[] = [];
 
   l.push(`📸 *Orçamento ${m.codigo}* — ${cat.contato.nome}`, "");
   l.push(`*Cliente:* ${limparLivre(c.nome)}`);
   if (c.telefone.trim()) l.push(`*WhatsApp:* ${limparLivre(c.telefone)}`);
-  l.push(`*Serviço:* ${nomeServico(m.selecao, cat)}`);
+  l.push(`*Serviço:* ${nomeServico(selecao, cat)}`);
   if (c.data) l.push(`*Data desejada:* ${dataBR(c.data)}${c.horario ? ` às ${c.horario}` : ""}`);
   else l.push("*Data desejada:* a definir");
   if (c.local.trim()) l.push(`*Local:* ${limparLivre(c.local)}`);
 
   l.push("", "*Itens*");
-  for (const it of calc.linhas) {
+  for (const it of calc.linhas.filter((x) => !x.grupo)) {
     const qtd = it.quantidade > 1 ? ` × ${it.quantidade}` : "";
     const valor =
       it.tipo === "aCombinar" ? "a combinar" : it.tipo === "aPartirDe" ? `a partir de ${moeda(it.valor)}` : moeda(it.valor);
     l.push(`• ${it.descricao}${qtd} — ${valor}`);
   }
 
+  // Deslocamento e entrega sempre aparecem (mesmo sem custo), para ficar claro o combinado.
+  const categoria = cat.categorias.find((x) => x.id === selecao.categoria);
+  if (categoria?.temSessao) {
+    const desl = cat.deslocamentos.find((d) => d.id === selecao.deslocamentoId);
+    const entrega = cat.entregas.find((e) => e.id === selecao.entregaId);
+    l.push("");
+    if (desl) l.push(`*Deslocamento:* ${desl.nome} — ${desl.aCombinar ? "a combinar" : desl.preco ? moeda(desl.preco) : "sem custo"}`);
+    if (entrega) l.push(`*Entrega:* ${entrega.nome} (${entrega.detalhe}) — ${entrega.preco ? moeda(entrega.preco) : "incluso"}`);
+  }
+
   l.push("");
   const temCombinar = calc.linhas.some((x) => x.tipo === "aCombinar");
   const prefixo = calc.linhas.some((x) => x.tipo === "aPartirDe") ? "a partir de " : "";
   l.push(`*Total:* ${prefixo}${moeda(calc.total)}${temCombinar ? " + itens a combinar" : ""}`);
-  // Sinal só entra na mensagem quando está ligado no catálogo (CATALOGO.cobrarSinal).
-  if (cat.cobrarSinal && c.data) {
-    const pct = percentualSinal(m.emitidoEm, c.data, cat);
-    l.push(`*Sinal (${pct}%):* ${moeda(valorSinal(calc.total, pct))} — reserva a data`);
-  } else if (cat.cobrarSinal) {
-    l.push("*Sinal:* definido quando a data for confirmada");
-  }
+  l.push(`*Sinal (${cat.sinalPercentual}%):* ${moeda(calc.sinal)} — reserva a data`);
+  l.push(`*Restante:* ${moeda(calc.restante)} — até o dia do ensaio ou evento`);
   l.push(`Válido até ${dataBR(somarDias(m.emitidoEm, cat.validadeDias))}`);
 
   if (c.observacoes.trim()) l.push("", `*Observações:* ${limparLivre(c.observacoes)}`);
@@ -334,7 +348,7 @@ export function gerarMensagem(m: Mensagem, cat: Catalogo): string {
       codigo: m.codigo,
       versao: cat.versao,
       emitidoEm: m.emitidoEm,
-      selecao: m.selecao,
+      selecao,
       data: c.data,
       horario: c.horario,
     }),

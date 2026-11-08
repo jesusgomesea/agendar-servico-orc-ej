@@ -5,7 +5,7 @@
 // o que foi combinado com o cliente não muda junto.
 
 import type { Catalogo } from "./catalogo";
-import { calcular, type LeituraOrcamento, type Linha, nomeServico, percentualSinal, type Selecao, valorSinal } from "./orcamento";
+import { calcular, type LeituraOrcamento, type Linha, nomeServico, normalizarSelecao, type Selecao, valorSinal } from "./orcamento";
 
 export const ETAPAS = [
   { id: "recebido", nome: "Recebido", descricao: "Orçamento chegou, falta confirmar data" },
@@ -57,8 +57,9 @@ export interface Agendamento {
   itens: Linha[];
   totalOrcado: number;
   totalEhMinimo: boolean;
-  /** Valor fechado na conversa (ex.: depois de combinar o deslocamento). null = vale o orçado. */
+  /** Valor fechado na conversa (ex.: deslocamento acima de 30 km, desconto). null = vale o orçado. */
   valorCombinado: number | null;
+  /** null só em agendamentos antigos, de quando o sinal estava desligado. */
   sinalPercentual: number | null;
 
   extras: Extra[];
@@ -93,14 +94,16 @@ export function criarDeLeitura(l: LeituraOrcamento, cat: Catalogo, agora = new D
     observacoes: cliente.observacoes,
     notas: "",
     servico: nomeServico(ref.selecao, cat),
-    selecao: ref.selecao,
+    selecao: normalizarSelecao(ref.selecao, cat),
     catalogoVersao: cat.versao,
     emitidoEm: ref.emitidoEm,
     itens: calculo.linhas,
     totalOrcado: calculo.total,
     totalEhMinimo: calculo.totalEhMinimo,
     valorCombinado: null,
-    sinalPercentual: cat.cobrarSinal && cliente.data ? percentualSinal(ref.emitidoEm, cliente.data, cat) : null,
+    // Percentual fixo do catálogo, gravado no agendamento: se a tabela mudar,
+    // o sinal combinado com este cliente não muda junto.
+    sinalPercentual: cat.sinalPercentual,
     extras: [],
     pagamentos: [],
   };

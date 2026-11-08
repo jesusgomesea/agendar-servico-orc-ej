@@ -1,10 +1,13 @@
 // Página pública (/): apresentação curta + montador de orçamento + o que está incluso e as políticas.
 // É Server Component só para ficar estática; a parte interativa é o <Montador/>.
-import { CATALOGO } from "@/lib/catalogo";
+import { CATALOGO, type ItemTexto } from "@/lib/catalogo";
 import Montador from "@/components/montador/Montador";
 
 export default function Inicio() {
   const cat = CATALOGO;
+  // Item que vale só para alguns serviços ganha a indicação (ex.: "só em evento pequeno").
+  const so = (t: ItemTexto) =>
+    t.categorias ? ` (${t.categorias.map((id) => cat.categorias.find((c) => c.id === id)?.nome.toLowerCase()).join(", ")})` : "";
   return (
     <>
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
@@ -12,8 +15,8 @@ export default function Inicio() {
           {/* eslint-disable-next-line @next/next/no-img-element -- logo estática pequena */}
           <img src="/logo.png" alt="" width={44} height={38} />
           <span className="font-titulo text-lg leading-tight font-semibold">
-            Eluan Jesus
-            <span className="block text-xs font-normal tracking-[0.2em] text-suave uppercase">Fotografia</span>
+            {cat.marca.nome}
+            <span className="block text-xs font-normal tracking-[0.2em] text-suave uppercase">{cat.marca.complemento}</span>
           </span>
         </a>
         <span className="text-sm text-suave">{cat.contato.cidade} · PI</span>
@@ -31,40 +34,35 @@ export default function Inicio() {
 
       <Montador />
 
-      <section className={`mx-auto grid max-w-6xl gap-4 px-4 pb-16 ${cat.cobrarSinal ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-16 md:grid-cols-3">
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Incluso em todos os pacotes</h2>
           <ul className="mt-3 flex flex-col gap-1.5 text-sm text-suave">
             {cat.incluso.map((i) => (
-              <li key={i}>— {i}</li>
+              <li key={i.texto}>
+                — {i.texto}
+                {so(i) && <span className="text-fraco">{so(i)}</span>}
+              </li>
             ))}
           </ul>
         </div>
-        {cat.cobrarSinal && (
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Sinal para reservar</h2>
-          <ul className="mt-3 flex flex-col gap-1.5 text-sm text-suave">
-            {cat.sinal.map((f, i) => {
-              const anterior = cat.sinal[i - 1];
-              const faixa =
-                i === 0 ? `${f.diasMin} dias ou mais antes` : f.diasMin === 0 ? `menos de ${anterior.diasMin} dias antes` : `de ${f.diasMin} a ${anterior.diasMin - 1} dias antes`;
-              return (
-                <li key={f.diasMin} className="flex justify-between gap-3">
-                  <span>{faixa}</span>
-                  <span className="tabular text-texto">{f.percentual}%</span>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="mt-3 text-xs text-fraco">O restante é acertado como combinarmos na conversa.</p>
+          <p className="mt-3 text-sm text-suave">
+            <span className="tabular font-semibold text-texto">{cat.sinalPercentual}%</span> do total, arredondado para cima. O restante é pago até o
+            dia do ensaio ou evento.
+          </p>
+          <p className="mt-3 text-xs text-fraco">{cat.reserva}</p>
         </div>
-        )}
         <div className="rounded-2xl border border-borda bg-superficie p-5">
           <h2 className="font-titulo text-lg font-semibold">Bom saber</h2>
           <dl className="mt-3 flex flex-col gap-2.5 text-sm">
             {cat.politicas.map((p) => (
               <div key={p.titulo}>
-                <dt className="text-texto">{p.titulo}</dt>
+                <dt className="text-texto">
+                  {p.titulo}
+                  {so(p) && <span className="text-fraco">{so(p)}</span>}
+                </dt>
                 <dd className="text-suave">{p.texto}</dd>
               </div>
             ))}

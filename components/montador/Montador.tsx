@@ -12,7 +12,15 @@
 
 import { Camera, Check, PartyPopper, SlidersHorizontal, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CATALOGO, type CategoriaId } from "@/lib/catalogo";
+import {
+  CATALOGO,
+  entregaValeNa,
+  lancamentoVigente,
+  pacoteDisponivel,
+  precoDoPacote,
+  type Catalogo,
+  type CategoriaId,
+} from "@/lib/catalogo";
 import { cn } from "@/lib/cn";
 import { hojeIso, moeda } from "@/lib/formato";
 import { calcular, precoFotoExtra, selecaoVazia, type DadosCliente, type Selecao } from "@/lib/orcamento";
@@ -20,7 +28,8 @@ import { Campo, CampoTexto } from "@/components/ui/Campo";
 import { Contador } from "@/components/ui/Contador";
 import Resumo from "./Resumo";
 
-const CHAVE_RASCUNHO = "ej-rascunho-v1";
+// v2 desde a tabela v3: rascunhos antigos apontavam para pacotes de evento que saíram.
+const CHAVE_RASCUNHO = "ej-rascunho-v2";
 
 const ICONES: Record<CategoriaId, ReactNode> = {
   ensaio: <Camera className="size-5" />,
@@ -30,6 +39,24 @@ const ICONES: Record<CategoriaId, ReactNode> = {
 };
 
 const CLIENTE_VAZIO: DadosCliente = { nome: "", telefone: "", local: "", data: "", horario: "", observacoes: "" };
+
+/**
+ * Tira da seleção o que o cliente não pode escolher agora: pacote desativado
+ * (ex.: Sessão Rápida fora de data especial) ou legado, entrega que não existe
+ * no serviço e faixa de deslocamento que saiu da tabela. Usado ao restaurar o
+ * rascunho e ao trocar de serviço, para a tela nunca mostrar algo escondido.
+ */
+function ajustarAoServico(s: Selecao, cat: Catalogo): Selecao {
+  const pacote = cat.pacotes.find((p) => p.id === s.pacoteId);
+  const entrega = cat.entregas.find((e) => e.id === s.entregaId);
+  const desl = cat.deslocamentos.find((d) => d.id === s.deslocamentoId);
+  return {
+    ...s,
+    pacoteId: pacote && pacote.categoria === s.categoria && pacoteDisponivel(pacote) ? s.pacoteId : null,
+    entregaId: entrega && entregaValeNa(entrega, s.categoria) ? s.entregaId : "padrao",
+    deslocamentoId: desl && !desl.legado ? s.deslocamentoId : "ate10",
+  };
+}
 
 export default function Montador() {
   const cat = CATALOGO;
@@ -48,14 +75,14 @@ export default function Montador() {
       const bruto = localStorage.getItem(CHAVE_RASCUNHO);
       if (bruto) {
         const r = JSON.parse(bruto) as { selecao?: Partial<Selecao>; cliente?: Partial<DadosCliente> };
-        if (r.selecao) setSelecao((s) => ({ ...s, ...r.selecao }));
+        if (r.selecao) setSelecao((s) => ajustarAoServico({ ...s, ...r.selecao }, cat));
         if (r.cliente) setCliente((c) => ({ ...c, ...r.cliente, data: r.cliente?.data && r.cliente.data >= hojeIso() ? r.cliente.data : "" }));
       }
     } catch {
       // Rascunho ilegível ou armazenamento bloqueado: começa do zero.
     }
     setRestaurado(true);
-  }, []);
+  }, [cat]);
 
   useEffect(() => {
     if (!restaurado) return;
@@ -68,7 +95,9 @@ export default function Montador() {
 
   const calculo = useMemo(() => calcular(selecao, cat), [selecao, cat]);
   const categoria = cat.categorias.find((c) => c.id === selecao.categoria)!;
-  const pacotes = cat.pacotes.filter((p) => p.categoria === categoria.id);
+  const pacotes = cat.pacotes.filter((p) => p.categoria === categoria.id && pacoteDisponivel(p));
+  const entregas = cat.entregas.filter((e) => entregaValeNa(e, categoria.id));
+  const temFotoBruta = cat.fotoBruta.categorias.includes(categoria.id);
 
   const mudar = <K extends keyof Selecao>(campo: K, valor: Selecao[K]) => setSelecao((s) => ({ ...s, [campo]: valor }));
   const mudarCliente = <K extends keyof DadosCliente>(campo: K, valor: DadosCliente[K]) => setCliente((c) => ({ ...c, [campo]: valor }));
@@ -76,9 +105,9 @@ export default function Montador() {
   const escolherCategoria = (id: CategoriaId) =>
     setSelecao((s) => {
       if (s.categoria === id) return s;
-      // O pacote escolhido pertence a outra categoria: limpa para não sobrar um "Padrão" de ensaio num evento.
-      const pacoteValido = cat.pacotes.some((p) => p.id === s.pacoteId && p.categoria === id);
-      return { ...s, categoria: id, pacoteId: pacoteValido ? s.pacoteId : null, diariasAuxiliar: Math.max(1, s.diariasAuxiliar) };
+      // O pacote de outra categoria é limpo (não sobra um "Padrão" de ensaio num
+      // evento) e a Expressa 24h de evento volta ao prazo padrão no ensaio.
+      return ajustarAoServico({ ...s, categoria: id, diariasAuxiliar: Math.max(1, s.diariasAuxiliar) }, cat);
     });
 
   let passo = 1;
@@ -106,19 +135,34 @@ export default function Montador() {
           {categoria.temSessao && (
             <Passo numero={passo++} titulo="Escolha o pacote" subtitulo={`Entrega padrão em ${categoria.prazoPadrao}, já inclusa.`}>
               <div className="grid gap-3 sm:grid-cols-2">
-                {pacotes.map((p) => (
-                  <Opcao key={p.id} selecionada={selecao.pacoteId === p.id} aoEscolher={() => mudar("pacoteId", p.id)}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="font-titulo text-xl font-semibold">{p.nome}</span>
-                      <span className="tabular text-lg font-semibold">{moeda(p.preco)}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-suave">{p.duracao}</p>
-                    <p className="text-sm text-suave">{p.entrega} editadas</p>
-                    {p.destaque && (
-                      <span className="mt-3 inline-block rounded-full border border-borda-forte px-2 py-0.5 text-xs text-suave">Mais escolhido</span>
-                    )}
-                  </Opcao>
-                ))}
+                {pacotes.map((p) => {
+                  const lancamento = lancamentoVigente(p);
+                  return (
+                    <Opcao key={p.id} selecionada={selecao.pacoteId === p.id} aoEscolher={() => mudar("pacoteId", p.id)}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-titulo text-xl font-semibold">{p.nome}</span>
+                        <span className="text-right">
+                          {lancamento && <span className="tabular block text-sm text-fraco line-through">{moeda(p.preco)}</span>}
+                          <span className="tabular text-lg font-semibold">{moeda(precoDoPacote(p))}</span>
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-suave">{p.duracao}</p>
+                      <p className="text-sm text-suave">{p.entrega} editadas</p>
+                      {lancamento && (
+                        <p className="mt-2 text-xs text-suave">
+                          {lancamento.aviso}{" "}
+                          <span className="font-semibold text-texto">
+                            {lancamento.vagasRestantes === 1 ? "Resta 1 vaga." : `Restam ${lancamento.vagasRestantes} vagas.`}
+                          </span>
+                        </p>
+                      )}
+                      {p.aviso && <p className="mt-2 text-xs text-suave">{p.aviso}</p>}
+                      {p.destaque && (
+                        <span className="mt-3 inline-block rounded-full border border-borda-forte px-2 py-0.5 text-xs text-suave">Mais escolhido</span>
+                      )}
+                    </Opcao>
+                  );
+                })}
               </div>
             </Passo>
           )}
@@ -157,20 +201,22 @@ export default function Montador() {
                 >
                   <Contador rotulo="fotos extras" valor={selecao.fotosExtras} aoMudar={(n) => mudar("fotosExtras", n)} maximo={300} />
                 </Linha>
-                <Linha
-                  titulo="Fotos brutas, sem edição"
-                  preco={`${moeda(cat.fotoBruta.preco)} / foto`}
-                  descricao={`Mínimo de ${cat.fotoBruta.minimo} unidades`}
-                >
-                  <Contador
-                    rotulo="fotos brutas"
-                    valor={selecao.fotosBrutas}
-                    aoMudar={(n) => mudar("fotosBrutas", n)}
-                    maximo={1000}
-                    passo={5}
-                    minimoQuandoAtivo={cat.fotoBruta.minimo}
-                  />
-                </Linha>
+                {temFotoBruta && (
+                  <Linha
+                    titulo="Fotos brutas, sem edição"
+                    preco={`${moeda(cat.fotoBruta.preco)} / foto`}
+                    descricao={`Mínimo de ${cat.fotoBruta.minimo} unidades. ${cat.fotoBruta.aviso}`}
+                  >
+                    <Contador
+                      rotulo="fotos brutas"
+                      valor={selecao.fotosBrutas}
+                      aoMudar={(n) => mudar("fotosBrutas", n)}
+                      maximo={1000}
+                      passo={5}
+                      minimoQuandoAtivo={cat.fotoBruta.minimo}
+                    />
+                  </Linha>
+                )}
                 <Linha titulo="Retoque pesado" descricao="Pele, remoção de objetos, ajustes finos" preco={`${moeda(cat.retoquePesado)} / foto`}>
                   <Contador rotulo="fotos com retoque pesado" valor={selecao.retoques} aoMudar={(n) => mudar("retoques", n)} maximo={100} />
                 </Linha>
@@ -178,7 +224,7 @@ export default function Montador() {
 
               <h3 className="mt-8 mb-3 text-sm font-semibold text-suave">Prazo de entrega</h3>
               <div className="grid gap-2 sm:grid-cols-2">
-                {cat.entregas.map((e) => (
+                {entregas.map((e) => (
                   <Opcao key={e.id} compacta selecionada={selecao.entregaId === e.id} aoEscolher={() => mudar("entregaId", e.id)}>
                     <span className="flex items-baseline justify-between gap-2">
                       <span>
@@ -194,7 +240,7 @@ export default function Montador() {
 
               <h3 className="mt-8 mb-3 text-sm font-semibold text-suave">Local do ensaio ou evento</h3>
               <div className="grid gap-2 sm:grid-cols-2">
-                {cat.deslocamentos.map((d) => (
+                {cat.deslocamentos.filter((d) => !d.legado).map((d) => (
                   <Opcao key={d.id} compacta selecionada={selecao.deslocamentoId === d.id} aoEscolher={() => mudar("deslocamentoId", d.id)}>
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="text-sm font-semibold">{d.nome}</span>

@@ -90,7 +90,7 @@ export default function ColarOrcamento({ aberto, aoFechar, existentes, aoCriar }
               setTexto(e.target.value);
               setAvisoColar("");
             }}
-            placeholder="📸 Orçamento EJ-XXXXX — Eluan Jesus Fotografia…"
+            placeholder={`📸 Orçamento EJ-XXXXX — ${CATALOGO.contato.nome}…`}
             className={`${classesEntrada} min-h-40 w-full py-3 font-mono text-xs`}
             autoFocus
           />
@@ -145,6 +145,12 @@ export default function ColarOrcamento({ aberto, aoFechar, existentes, aoCriar }
               <li className="mt-1 flex justify-between border-t border-borda pt-2 font-semibold">
                 <span>Total pela tabela</span>
                 <span className="tabular">{moeda(resultado.leitura.calculo.total)}</span>
+              </li>
+              <li className="flex justify-between gap-4 text-suave">
+                <span>Sinal ({CATALOGO.sinalPercentual}%) · restante</span>
+                <span className="tabular">
+                  {moeda(resultado.leitura.calculo.sinal)} · {moeda(resultado.leitura.calculo.restante)}
+                </span>
               </li>
             </ul>
           </div>

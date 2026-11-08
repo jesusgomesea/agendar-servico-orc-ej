@@ -15,15 +15,19 @@ por [lib/orcamento.test.ts](../lib/orcamento.test.ts).
 
 | Regra | Onde |
 |---|---|
-| Preços, pacotes, extras, entregas, deslocamento, incluso, políticas | `CATALOGO` em [lib/catalogo.ts](../lib/catalogo.ts) |
-| Foto extra: R$13; com 10 ou mais, **todas** saem a R$11 | `precoFotoExtra()` |
-| Foto bruta: 0 ou no mínimo 20 | `calcular()` (pendência) + `Contador` com `minimoQuandoAtivo` |
-| Hora extra: ensaio R$60 / evento R$90 | `Categoria.horaExtra` |
-| Deslocamento acima de 10 km: "a combinar", fora do total | `OpcaoDeslocamento.aCombinar` → linha `tipo: "aCombinar"` |
+| Preços, pacotes, extras, entregas, deslocamento, sinal, incluso, políticas | `CATALOGO` em [lib/catalogo.ts](../lib/catalogo.ts) |
+| Nome de apresentação (cabeçalho, título, mensagem, login) | `MARCA` em `catalogo.ts` → `CATALOGO.marca` / `contato.nome` |
+| Foto extra: R$13; com 10 ou mais, **todas** saem a R$11 (ensaio e evento) | `precoFotoExtra()` |
+| Foto bruta: **só em evento**, 0 ou no mínimo 20 | `fotoBruta.categorias` + `normalizarSelecao()`; pendência em `calcular()` |
+| Hora extra: ensaio R$60 / evento R$70 | `Categoria.horaExtra` |
+| Essencial: preço de lançamento (R$150 em vez de R$250) enquanto `ativo` e `vagasRestantes > 0` | `Pacote.lancamento` + `precoDoPacote()` / `lancamentoVigente()` |
+| Sessão Rápida: aparece só com `ativo: true` (datas especiais de agenda coletiva) | `Pacote.ativo` + `pacoteDisponivel()` |
+| Expressa 24h: **só em evento** (+R$60) | `OpcaoEntrega.categorias` + `entregaValeNa()` |
+| Deslocamento: até 10 km grátis · 10–20 km +R$25 · 20–30 km +R$45 · acima de 30 km a combinar (fora do total) | `deslocamentos`; `aCombinar` → linha `tipo: "aCombinar"` |
 | Fotógrafo auxiliar: "a partir de R$100" por diária | linha `tipo: "aPartirDe"` |
-| **Sinal desligado por enquanto** (10/10/2026): some do site, da mensagem e do painel | `COBRAR_SINAL` em `catalogo.ts` → `CATALOGO.cobrarSinal` |
-| Sinal (quando ligado): 20% com 60+ dias · 35% com 15–59 · 50% com menos de 15 | `CATALOGO.sinal` + `percentualSinal()` |
-| Sinal é contado da **data do orçamento** (`emitidoEm`) até a data do serviço | idem; ao mudar a data no painel, recalcula com o mesmo `emitidoEm` |
+| Sinal: 40% do total, **arredondado para cima** em reais inteiros, em todos os serviços | `CATALOGO.sinalPercentual` + `valorSinal()`; gravado no agendamento (`sinalPercentual`) |
+| Chuva (só ensaio) e cancelamento: números nos textos do "Bom saber" | `chuvaHorasAntes`, `cancelamento` (os textos de `politicas` são montados com eles) |
+| Itens de "Incluso"/"Bom saber" que valem só para um serviço | `ItemTexto.categorias` (a página mostra o serviço entre parênteses) |
 | Validade do orçamento: 7 dias | `CATALOGO.validadeDias` |
 | Remarcação R$45 / reedição R$18 | texto em `politicas` + atalhos `EXTRAS_RAPIDOS` no detalhe |
 
@@ -50,9 +54,21 @@ rótulo (`*Cliente:*`, `*WhatsApp:*`…), lidas com ou sem os asteriscos.
 
 **Compatibilidade:** mensagens antigas continuam circulando por dias. Ao mudar o formato, mantenha a
 leitura do formato anterior. Os ids de pacote (`ev-curta`…) e de entrega (`4d`…) **nunca** devem ser
-renomeados: crie um id novo e remova o antigo do montador só depois que os orçamentos velhos expirarem.
+renomeados: crie um id novo e marque o antigo com `legado: true` (some do montador, o painel ainda lê).
+Apague o legado só depois que os orçamentos velhos expirarem. Foi assim na tabela v3: os eventos novos
+são `ev-essencial`, `ev-padrao3` e `ev-completo`, porque `ev-padrao` já existia com outro conteúdo.
+
+**Preço de lançamento no painel:** o painel recalcula pela tabela de agora. Se as vagas acabarem entre o
+envio e a colagem, o total do Essencial sobe para o cheio e aparece o aviso "não bate". Ajuste no
+`valorCombinado` do agendamento. Qualquer outro desconto combinado na conversa também vai ali.
 
 ## 4. Receitas
+
+**Atualizar as vagas de lançamento:** diminua `vagasRestantes` do Essencial em `catalogo.ts` a cada evento
+fechado com o preço de lançamento e publique. Em 0 (ou com `ativo: false`), o pacote volta sozinho ao preço
+cheio no site, no sinal e na mensagem. Não precisa aumentar `versao` só por isso.
+
+**Ligar/desligar a Sessão Rápida:** `ativo` do pacote `en-rapida` em `catalogo.ts`.
 
 **Mudar um preço:** edite `CATALOGO` e aumente `versao`. Rode `npm test`, porque alguns testes conferem
 valores e precisam ser atualizados junto, de propósito.

@@ -26,8 +26,14 @@ O botão **Cópia** no painel baixa a agenda inteira em JSON. Vale guardar uma c
 
 ## Mudar preços
 
-**Sinal:** está desligado por enquanto. Para voltar a cobrar, troque `COBRAR_SINAL` para `true` em
-[lib/catalogo.ts](lib/catalogo.ts). As faixas de 20/35/50% continuam guardadas lá.
+**Sinal:** 40% do total, arredondado para cima (`sinalPercentual` em [lib/catalogo.ts](lib/catalogo.ts)).
+
+**Preço de lançamento do Essencial:** a cada evento fechado com ele, diminua `vagasRestantes` em
+[lib/catalogo.ts](lib/catalogo.ts) e publique. Em 0, o site volta sozinho ao preço cheio.
+
+**Sessão Rápida:** troque `ativo` do pacote `en-rapida` para mostrar ou esconder no site.
+
+**Nome exibido:** `MARCA` no topo de [lib/catalogo.ts](lib/catalogo.ts) vale para o site todo.
 
 Os valores estão todos em [lib/catalogo.ts](lib/catalogo.ts). Ao mudar qualquer preço, **aumente
 `versao`** no topo do catálogo. Assim o painel avisa quando alguém mandar um orçamento feito com a

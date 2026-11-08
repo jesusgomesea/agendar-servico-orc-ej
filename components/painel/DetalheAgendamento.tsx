@@ -21,7 +21,6 @@ import {
 import { CATALOGO } from "@/lib/catalogo";
 import { cn } from "@/lib/cn";
 import { dataBR, hojeIso, lerMoeda, linkWhatsApp, moeda } from "@/lib/formato";
-import { percentualSinal } from "@/lib/orcamento";
 import { Botao, classesBotao } from "@/components/ui/Botao";
 import { Campo, CampoTexto, classesEntrada } from "@/components/ui/Campo";
 import { Modal } from "@/components/ui/Modal";
@@ -61,10 +60,6 @@ export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, ao
 
   const salvar = async () => {
     const final = { ...a, atualizadoEm: new Date().toISOString() };
-    // Data mudou: o percentual do sinal segue a antecedência entre o orçamento e a nova data.
-    if (CATALOGO.cobrarSinal && final.data !== agendamento.data) {
-      final.sinalPercentual = final.data ? percentualSinal(final.emitidoEm, final.data, CATALOGO) : null;
-    }
     // Mudança de etapa já registrou o histórico em mudarStatus; aqui só grava.
     if (await aoSalvar(final)) aoFechar();
   };
@@ -243,9 +238,9 @@ export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, ao
             comData
             placeholder="Entrada, restante…"
           />
-          <dl className={cn("mt-4 grid gap-3", CATALOGO.cobrarSinal ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+          <dl className={cn("mt-4 grid gap-3", sinal !== null ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
             <Numero rotulo="Total" valor={moeda(valorTotal(a))} />
-            {CATALOGO.cobrarSinal && <Numero rotulo={sinal !== null ? `Sinal (${a.sinalPercentual}%)` : "Sinal"} valor={sinal !== null ? moeda(sinal) : "sem data"} />}
+            {sinal !== null && <Numero rotulo={`Sinal (${a.sinalPercentual}%)`} valor={moeda(sinal)} />}
             <Numero rotulo="Pago" valor={moeda(valorPago(a))} />
             <Numero rotulo="Restante" valor={moeda(valorRestante(a))} destaque={valorRestante(a) > 0} />
           </dl>

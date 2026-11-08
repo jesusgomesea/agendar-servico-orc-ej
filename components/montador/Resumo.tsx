@@ -1,4 +1,4 @@
-// Resumo do orçamento ao lado do montador: itens, total, sinal (se ligado no catálogo) e o botão de enviar.
+// Resumo do orçamento ao lado do montador: itens, total, sinal, restante e o botão de enviar.
 //
 // "Enviar pelo WhatsApp" gera um código novo a cada clique e abre o wa.me com a
 // mensagem pronta (gerarMensagem). Há também "Copiar mensagem" porque, em alguns
@@ -9,13 +9,11 @@
 import { Copy, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { CATALOGO } from "@/lib/catalogo";
-import { dataBR, diasEntre, hojeIso, linkWhatsApp, moeda, soDigitos } from "@/lib/formato";
+import { hojeIso, linkWhatsApp, moeda, soDigitos } from "@/lib/formato";
 import {
   gerarMensagem,
   nomeServico,
   novoCodigo,
-  percentualSinal,
-  valorSinal,
   type Calculo,
   type DadosCliente,
   type Selecao,
@@ -42,7 +40,6 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
 
   const temCombinar = calculo.linhas.some((l) => l.tipo === "aCombinar");
   const aPartirDe = calculo.linhas.some((l) => l.tipo === "aPartirDe");
-  const pct = cat.cobrarSinal && cliente.data ? percentualSinal(hoje, cliente.data, cat) : null;
 
   const montarTexto = () => gerarMensagem({ codigo: novoCodigo(), emitidoEm: hoje, selecao, cliente }, cat);
 
@@ -96,29 +93,18 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
         </div>
         {temCombinar && <p className="mt-1 text-right text-xs text-fraco">+ deslocamento a combinar</p>}
 
-        {cat.cobrarSinal && (
-        <div className="mt-4 rounded-lg bg-superficie-2 px-3 py-2.5 text-sm">
-          {pct !== null && cliente.data >= hoje ? (
-            <p>
-              <span className="font-semibold">Sinal de {pct}%: {moeda(valorSinal(calculo.total, pct))}</span>
-              <span className="text-suave">
-                {" "}
-                para reservar {dataBR(cliente.data)} (faltam {diasEntre(hoje, cliente.data)} dias).
-              </span>
+        {calculo.total > 0 && (
+          <div className="mt-4 flex flex-col gap-1.5 rounded-lg bg-superficie-2 px-3 py-2.5 text-sm">
+            <p className="flex justify-between gap-4">
+              <span className="font-semibold">Sinal ({cat.sinalPercentual}%)</span>
+              <span className="tabular font-semibold">{moeda(calculo.sinal)}</span>
             </p>
-          ) : (
-            <p className="text-suave">
-              O sinal reserva a data e depende da antecedência:{" "}
-              {cat.sinal.map((f, i) => (
-                <span key={f.diasMin}>
-                  {i > 0 && " · "}
-                  <span className="text-texto">{f.percentual}%</span> {f.diasMin > 0 ? `com ${f.diasMin}+ dias` : "em cima da hora"}
-                </span>
-              ))}
-              .
+            <p className="flex justify-between gap-4 text-suave">
+              <span>Restante até o dia do ensaio ou evento</span>
+              <span className="tabular shrink-0">{moeda(calculo.restante)}</span>
             </p>
-          )}
-        </div>
+            <p className="mt-1 text-xs text-fraco">{cat.reserva}</p>
+          </div>
         )}
       </div>
 
@@ -139,7 +125,7 @@ export default function Resumo({ selecao, cliente, calculo }: Props) {
           Copiar mensagem
         </Botao>
         <p className="text-center text-xs text-fraco">
-          Orçamento válido por {cat.validadeDias} dias. A data só é garantida após a {cat.cobrarSinal ? "confirmação e o sinal" : "minha confirmação"}.
+          Orçamento válido por {cat.validadeDias} dias.
         </p>
       </div>
     </div>
