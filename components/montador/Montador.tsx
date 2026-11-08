@@ -10,51 +10,46 @@
 // qualquer falha de leitura/escrita é ignorada.
 "use client";
 
-import { Camera, Check, PartyPopper, SlidersHorizontal, Users } from "lucide-react";
+import { Camera, Check, PartyPopper, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  CATALOGO,
-  entregaValeNa,
-  lancamentoVigente,
-  pacoteDisponivel,
-  precoDoPacote,
-  type Catalogo,
-  type CategoriaId,
-} from "@/lib/catalogo";
+import { CATALOGO, entregaValeNo, pacoteDisponivel, type Catalogo, type CategoriaId, type Pacote } from "@/lib/catalogo";
 import { cn } from "@/lib/cn";
 import { hojeIso, moeda } from "@/lib/formato";
-import { calcular, precoFotoExtra, selecaoVazia, type DadosCliente, type Selecao } from "@/lib/orcamento";
+import { calcular, precoFoto, prazoEntrega, selecaoVazia, type DadosCliente, type Selecao } from "@/lib/orcamento";
 import { Campo, CampoTexto } from "@/components/ui/Campo";
 import { Contador } from "@/components/ui/Contador";
 import Resumo from "./Resumo";
 
-// v2 desde a tabela v3: rascunhos antigos apontavam para pacotes de evento que saíram.
-const CHAVE_RASCUNHO = "ej-rascunho-v2";
+// v3 desde a tabela v4: rascunhos antigos tinham fotos brutas, retoque e "Edição de fotos".
+const CHAVE_RASCUNHO = "ej-rascunho-v3";
 
-const ICONES: Record<CategoriaId, ReactNode> = {
+const ICONES: Partial<Record<CategoriaId, ReactNode>> = {
   ensaio: <Camera className="size-5" />,
   evento: <PartyPopper className="size-5" />,
   auxiliar: <Users className="size-5" />,
-  edicao: <SlidersHorizontal className="size-5" />,
 };
 
 const CLIENTE_VAZIO: DadosCliente = { nome: "", telefone: "", local: "", data: "", horario: "", observacoes: "" };
 
 /**
- * Tira da seleção o que o cliente não pode escolher agora: pacote desativado
- * (ex.: Sessão Rápida fora de data especial) ou legado, entrega que não existe
- * no serviço e faixa de deslocamento que saiu da tabela. Usado ao restaurar o
- * rascunho e ao trocar de serviço, para a tela nunca mostrar algo escondido.
+ * Tira da seleção o que o cliente não pode escolher agora: serviço ou pacote
+ * fora do site (legado ou desativado, ex.: Sessão Rápida fora de data especial),
+ * expressa que o pacote não oferece e faixa de deslocamento que saiu da tabela.
+ * Usado ao restaurar o rascunho e ao trocar de serviço/pacote, para a tela nunca
+ * mostrar algo escondido.
  */
 function ajustarAoServico(s: Selecao, cat: Catalogo): Selecao {
-  const pacote = cat.pacotes.find((p) => p.id === s.pacoteId);
-  const entrega = cat.entregas.find((e) => e.id === s.entregaId);
-  const desl = cat.deslocamentos.find((d) => d.id === s.deslocamentoId);
+  const categoria = cat.categorias.find((c) => c.id === s.categoria);
+  const r = categoria && !categoria.legado ? { ...s } : { ...s, categoria: "ensaio" as CategoriaId };
+  const pacote = cat.pacotes.find((p) => p.id === r.pacoteId);
+  const entrega = cat.entregas.find((e) => e.id === r.entregaId);
+  const desl = cat.deslocamentos.find((d) => d.id === r.deslocamentoId);
+  const pacoteOk = pacote && pacote.categoria === r.categoria && pacoteDisponivel(pacote);
   return {
-    ...s,
-    pacoteId: pacote && pacote.categoria === s.categoria && pacoteDisponivel(pacote) ? s.pacoteId : null,
-    entregaId: entrega && entregaValeNa(entrega, s.categoria) ? s.entregaId : "padrao",
-    deslocamentoId: desl && !desl.legado ? s.deslocamentoId : "ate10",
+    ...r,
+    pacoteId: pacoteOk ? r.pacoteId : null,
+    entregaId: entrega && pacoteOk && entregaValeNo(entrega, r.pacoteId) ? r.entregaId : "padrao",
+    deslocamentoId: desl && !desl.legado ? r.deslocamentoId : "ate10",
   };
 }
 
@@ -96,8 +91,11 @@ export default function Montador() {
   const calculo = useMemo(() => calcular(selecao, cat), [selecao, cat]);
   const categoria = cat.categorias.find((c) => c.id === selecao.categoria)!;
   const pacotes = cat.pacotes.filter((p) => p.categoria === categoria.id && pacoteDisponivel(p));
-  const entregas = cat.entregas.filter((e) => entregaValeNa(e, categoria.id));
-  const temFotoBruta = cat.fotoBruta.categorias.includes(categoria.id);
+  const pacote = pacotes.find((p) => p.id === selecao.pacoteId);
+  const personalizado = !!pacote?.personalizado;
+  const expressas = pacote ? cat.entregas.filter((e) => entregaValeNo(e, pacote.id)) : [];
+  const prazo = prazoEntrega({ ...selecao, entregaId: "padrao" }, cat);
+  const modoAuxiliar = cat.auxiliar.modos.find((m) => m.id === selecao.modoAuxiliar) ?? cat.auxiliar.modos[0];
 
   const mudar = <K extends keyof Selecao>(campo: K, valor: Selecao[K]) => setSelecao((s) => ({ ...s, [campo]: valor }));
   const mudarCliente = <K extends keyof DadosCliente>(campo: K, valor: DadosCliente[K]) => setCliente((c) => ({ ...c, [campo]: valor }));
@@ -105,9 +103,19 @@ export default function Montador() {
   const escolherCategoria = (id: CategoriaId) =>
     setSelecao((s) => {
       if (s.categoria === id) return s;
-      // O pacote de outra categoria é limpo (não sobra um "Padrão" de ensaio num
-      // evento) e a Expressa 24h de evento volta ao prazo padrão no ensaio.
+      // O pacote de outra categoria é limpo (não sobra um "Padrão" de ensaio num evento).
       return ajustarAoServico({ ...s, categoria: id, diariasAuxiliar: Math.max(1, s.diariasAuxiliar) }, cat);
+    });
+
+  const escolherPacote = (p: Pacote) =>
+    setSelecao((s) => {
+      const regra = cat.categorias.find((c) => c.id === p.categoria)?.personalizado;
+      // Personalizado começa no mínimo de horas e fotos, para o total já sair válido.
+      const comMinimos =
+        p.personalizado && regra
+          ? { horasPersonalizado: Math.max(regra.horasMin, s.horasPersonalizado), fotosPersonalizado: Math.max(regra.fotosMin, s.fotosPersonalizado) }
+          : {};
+      return ajustarAoServico({ ...s, pacoteId: p.id, ...comMinimos }, cat);
     });
 
   let passo = 1;
@@ -118,137 +126,167 @@ export default function Montador() {
         <div className="flex flex-col gap-12">
           <Passo numero={passo++} titulo="Qual serviço você procura?">
             <div className="grid gap-3 sm:grid-cols-2">
-              {cat.categorias.map((c) => (
-                <Opcao key={c.id} selecionada={selecao.categoria === c.id} aoEscolher={() => escolherCategoria(c.id)}>
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 text-suave">{ICONES[c.id]}</span>
-                    <span>
-                      <span className="block font-semibold">{c.nome}</span>
-                      <span className="mt-0.5 block text-sm text-suave">{c.descricao}</span>
-                    </span>
-                  </div>
-                </Opcao>
-              ))}
+              {cat.categorias
+                .filter((c) => !c.legado)
+                .map((c) => (
+                  <Opcao key={c.id} selecionada={selecao.categoria === c.id} aoEscolher={() => escolherCategoria(c.id)}>
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 text-suave">{ICONES[c.id]}</span>
+                      <span>
+                        <span className="block font-semibold">{c.nome}</span>
+                        <span className="mt-0.5 block text-sm text-suave">{c.descricao}</span>
+                      </span>
+                    </div>
+                  </Opcao>
+                ))}
             </div>
           </Passo>
 
           {categoria.temSessao && (
-            <Passo numero={passo++} titulo="Escolha o pacote" subtitulo={`Entrega padrão em ${categoria.prazoPadrao}, já inclusa.`}>
+            <Passo numero={passo++} titulo="Escolha o pacote" subtitulo="O prazo de entrega depende do pacote.">
               <div className="grid gap-3 sm:grid-cols-2">
-                {pacotes.map((p) => {
-                  const lancamento = lancamentoVigente(p);
-                  return (
-                    <Opcao key={p.id} selecionada={selecao.pacoteId === p.id} aoEscolher={() => mudar("pacoteId", p.id)}>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="font-titulo text-xl font-semibold">{p.nome}</span>
-                        <span className="text-right">
-                          {lancamento && <span className="tabular block text-sm text-fraco line-through">{moeda(p.preco)}</span>}
-                          <span className="tabular text-lg font-semibold">{moeda(precoDoPacote(p))}</span>
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-suave">{p.duracao}</p>
-                      <p className="text-sm text-suave">{p.entrega} editadas</p>
-                      {lancamento && (
-                        <p className="mt-2 text-xs text-suave">
-                          {lancamento.aviso}{" "}
-                          <span className="font-semibold text-texto">
-                            {lancamento.vagasRestantes === 1 ? "Resta 1 vaga." : `Restam ${lancamento.vagasRestantes} vagas.`}
-                          </span>
-                        </p>
-                      )}
-                      {p.aviso && <p className="mt-2 text-xs text-suave">{p.aviso}</p>}
-                      {p.destaque && (
-                        <span className="mt-3 inline-block rounded-full border border-borda-forte px-2 py-0.5 text-xs text-suave">Mais escolhido</span>
-                      )}
-                    </Opcao>
-                  );
-                })}
+                {pacotes.map((p) => (
+                  <Opcao key={p.id} selecionada={selecao.pacoteId === p.id} aoEscolher={() => escolherPacote(p)}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-titulo text-xl font-semibold">{p.nome}</span>
+                      <span className="tabular text-lg font-semibold">{p.personalizado ? "sob medida" : moeda(p.preco)}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-suave">{p.duracao}</p>
+                    <p className="text-sm text-suave">{p.personalizado ? p.entrega : `${p.entrega} editadas`}</p>
+                    <p className="mt-2 text-xs text-fraco">
+                      {p.personalizado
+                        ? `${moeda(categoria.personalizado?.valorHora ?? 0)} por hora · ${moeda(categoria.foto?.preco ?? 0)} por foto`
+                        : `Entrega ${p.prazo}`}
+                    </p>
+                    {p.aviso && <p className="mt-2 text-xs text-suave">{p.aviso}</p>}
+                    {p.destaque && (
+                      <span className="mt-3 inline-block rounded-full border border-borda-forte px-2 py-0.5 text-xs text-suave">Mais escolhido</span>
+                    )}
+                  </Opcao>
+                ))}
               </div>
             </Passo>
           )}
 
           {categoria.id === "auxiliar" && (
-            <Passo numero={passo++} titulo="Quantas diárias?" subtitulo={cat.auxiliar.observacao}>
-              <Linha titulo="Diárias" preco={`a partir de ${moeda(cat.auxiliar.aPartirDe)} cada`}>
-                <Contador rotulo="diárias" valor={selecao.diariasAuxiliar} aoMudar={(n) => mudar("diariasAuxiliar", n)} minimo={1} maximo={30} />
-              </Linha>
-            </Passo>
-          )}
-
-          {categoria.id === "edicao" && (
-            <Passo numero={passo++} titulo="Quantas fotos?" subtitulo="Envie as fotos pelo WhatsApp depois de fechar o orçamento.">
-              <div className="divide-y divide-borda rounded-xl border border-borda bg-superficie">
-                <Linha titulo="Edição de foto" descricao="Cor, luz e acabamento" preco={`${moeda(cat.edicaoCliente)} / foto`}>
-                  <Contador rotulo="fotos para edição" valor={selecao.edicoes} aoMudar={(n) => mudar("edicoes", n)} maximo={300} />
-                </Linha>
-                <Linha titulo="Retoque pesado" descricao="Pele, remoção de objetos, ajustes finos" preco={`${moeda(cat.retoquePesado)} / foto`}>
-                  <Contador rotulo="fotos com retoque pesado" valor={selecao.retoques} aoMudar={(n) => mudar("retoques", n)} maximo={100} />
+            <Passo numero={passo++} titulo="Como é a diária?" subtitulo={cat.auxiliar.observacao}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {cat.auxiliar.modos.map((m) => (
+                  <Opcao key={m.id} compacta selecionada={selecao.modoAuxiliar === m.id} aoEscolher={() => mudar("modoAuxiliar", m.id)}>
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="text-sm font-semibold">{m.nome}</span>
+                      <span className="tabular text-sm">{moeda(m.diaria)}</span>
+                    </span>
+                  </Opcao>
+                ))}
+              </div>
+              <div className="mt-4 rounded-xl border border-borda bg-superficie">
+                <Linha titulo="Diárias" preco={`${moeda(modoAuxiliar.diaria)} cada`}>
+                  <Contador rotulo="diárias" valor={selecao.diariasAuxiliar} aoMudar={(n) => mudar("diariasAuxiliar", n)} minimo={1} maximo={30} />
                 </Linha>
               </div>
+              {modoAuxiliar.cobraDeslocamento && (
+                <>
+                  <h3 className="mt-8 mb-3 text-sm font-semibold text-suave">Local do trabalho</h3>
+                  <Deslocamentos cat={cat} escolhido={selecao.deslocamentoId} aoEscolher={(id) => mudar("deslocamentoId", id)} />
+                </>
+              )}
             </Passo>
           )}
 
           {categoria.temSessao && (
-            <Passo numero={passo++} titulo="Ajuste do seu jeito" subtitulo="Opcional. Deixe em zero o que não precisar.">
+            <Passo
+              numero={passo++}
+              titulo={personalizado ? "Monte o seu pacote" : "Ajuste do seu jeito"}
+              subtitulo={personalizado ? "Escolha as horas de cobertura e quantas fotos editadas quer." : "Opcional. Deixe em zero o que não precisar."}
+            >
               <div className="divide-y divide-borda rounded-xl border border-borda bg-superficie">
-                <Linha titulo="Hora extra em campo" preco={`${moeda(categoria.horaExtra ?? 0)} / hora`}>
-                  <Contador rotulo="horas extras" valor={selecao.horasExtras} aoMudar={(n) => mudar("horasExtras", n)} maximo={8} unidade="h" />
-                </Linha>
-                <Linha
-                  titulo="Fotos extras editadas"
-                  preco={`${moeda(precoFotoExtra(selecao.fotosExtras, cat))} / foto`}
-                  descricao={`${moeda(cat.fotoExtra.precoVolume)} cada a partir de ${cat.fotoExtra.volumeMin}`}
-                >
-                  <Contador rotulo="fotos extras" valor={selecao.fotosExtras} aoMudar={(n) => mudar("fotosExtras", n)} maximo={300} />
-                </Linha>
-                {temFotoBruta && (
-                  <Linha
-                    titulo="Fotos brutas, sem edição"
-                    preco={`${moeda(cat.fotoBruta.preco)} / foto`}
-                    descricao={`Mínimo de ${cat.fotoBruta.minimo} unidades. ${cat.fotoBruta.aviso}`}
-                  >
-                    <Contador
-                      rotulo="fotos brutas"
-                      valor={selecao.fotosBrutas}
-                      aoMudar={(n) => mudar("fotosBrutas", n)}
-                      maximo={1000}
-                      passo={5}
-                      minimoQuandoAtivo={cat.fotoBruta.minimo}
-                    />
-                  </Linha>
+                {personalizado && categoria.personalizado && categoria.foto ? (
+                  <>
+                    <Linha
+                      titulo="Horas de cobertura"
+                      preco={`${moeda(categoria.personalizado.valorHora)} / hora`}
+                      descricao={`Mínimo de ${categoria.personalizado.horasMin}h`}
+                    >
+                      <Contador
+                        rotulo="horas de cobertura"
+                        valor={selecao.horasPersonalizado}
+                        aoMudar={(n) => mudar("horasPersonalizado", n)}
+                        minimo={categoria.personalizado.horasMin}
+                        maximo={12}
+                        unidade="h"
+                      />
+                    </Linha>
+                    <Linha
+                      titulo="Fotos editadas"
+                      preco={`${moeda(precoFoto(selecao.fotosPersonalizado, categoria))} / foto`}
+                      descricao={`Mínimo de ${categoria.personalizado.fotosMin} · ${moeda(categoria.foto.precoVolume)} cada a partir de ${categoria.foto.volumeMin}`}
+                    >
+                      <Contador
+                        rotulo="fotos editadas"
+                        valor={selecao.fotosPersonalizado}
+                        aoMudar={(n) => mudar("fotosPersonalizado", n)}
+                        minimo={categoria.personalizado.fotosMin}
+                        maximo={500}
+                      />
+                    </Linha>
+                  </>
+                ) : (
+                  <>
+                    <Linha titulo="Hora extra em campo" preco={`${moeda(categoria.horaExtra ?? 0)} / hora`}>
+                      <Contador rotulo="horas extras" valor={selecao.horasExtras} aoMudar={(n) => mudar("horasExtras", n)} maximo={8} unidade="h" />
+                    </Linha>
+                    {categoria.foto && (
+                      <Linha
+                        titulo="Fotos extras editadas"
+                        preco={`${moeda(precoFoto(selecao.fotosExtras, categoria))} / foto`}
+                        descricao={`${moeda(categoria.foto.precoVolume)} cada a partir de ${categoria.foto.volumeMin}`}
+                      >
+                        <Contador rotulo="fotos extras" valor={selecao.fotosExtras} aoMudar={(n) => mudar("fotosExtras", n)} maximo={300} />
+                      </Linha>
+                    )}
+                  </>
                 )}
-                <Linha titulo="Retoque pesado" descricao="Pele, remoção de objetos, ajustes finos" preco={`${moeda(cat.retoquePesado)} / foto`}>
-                  <Contador rotulo="fotos com retoque pesado" valor={selecao.retoques} aoMudar={(n) => mudar("retoques", n)} maximo={100} />
-                </Linha>
               </div>
 
               <h3 className="mt-8 mb-3 text-sm font-semibold text-suave">Prazo de entrega</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {entregas.map((e) => (
-                  <Opcao key={e.id} compacta selecionada={selecao.entregaId === e.id} aoEscolher={() => mudar("entregaId", e.id)}>
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span>
-                        <span className="block text-sm font-semibold">{e.nome}</span>
-                        <span className="block text-xs text-suave">{e.detalhe}</span>
+              {!pacote || !prazo ? (
+                <p className="text-sm text-suave">Escolha um pacote para ver o prazo.</p>
+              ) : expressas.length === 0 ? (
+                <p className="rounded-xl border border-borda bg-superficie px-4 py-3 text-sm">
+                  <span className="font-semibold">{prazo.detalhe}</span>
+                  <span className="text-suave"> · incluso{personalizado ? " (pela quantidade de fotos)" : ""}</span>
+                </p>
+              ) : (
+                <>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Opcao compacta selecionada={selecao.entregaId === "padrao"} aoEscolher={() => mudar("entregaId", "padrao")}>
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span>
+                          <span className="block text-sm font-semibold">Prazo padrão</span>
+                          <span className="block text-xs text-suave">{prazo.detalhe}</span>
+                        </span>
+                        <span className="tabular text-sm">incluso</span>
                       </span>
-                      <span className="tabular text-sm">{e.preco ? `+ ${moeda(e.preco)}` : "incluso"}</span>
-                    </span>
-                  </Opcao>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-fraco">A entrega expressa depende da agenda da semana; confirmo na conversa.</p>
+                    </Opcao>
+                    {expressas.map((e) => (
+                      <Opcao key={e.id} compacta selecionada={selecao.entregaId === e.id} aoEscolher={() => mudar("entregaId", e.id)}>
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span>
+                            <span className="block text-sm font-semibold">{e.nome}</span>
+                            <span className="block text-xs text-suave">{e.detalhe}</span>
+                          </span>
+                          <span className="tabular shrink-0 text-sm">+ {moeda(e.preco)}</span>
+                        </span>
+                      </Opcao>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-fraco">A entrega expressa depende da agenda da semana; confirmo na conversa.</p>
+                </>
+              )}
 
               <h3 className="mt-8 mb-3 text-sm font-semibold text-suave">Local do ensaio ou evento</h3>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {cat.deslocamentos.filter((d) => !d.legado).map((d) => (
-                  <Opcao key={d.id} compacta selecionada={selecao.deslocamentoId === d.id} aoEscolher={() => mudar("deslocamentoId", d.id)}>
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold">{d.nome}</span>
-                      <span className="text-sm text-suave">{d.aCombinar ? "a combinar" : d.preco ? `+ ${moeda(d.preco)}` : "sem custo"}</span>
-                    </span>
-                  </Opcao>
-                ))}
-              </div>
+              <Deslocamentos cat={cat} escolhido={selecao.deslocamentoId} aoEscolher={(id) => mudar("deslocamentoId", id)} />
             </Passo>
           )}
 
@@ -266,28 +304,24 @@ export default function Montador() {
                 obrigatorio
                 maxLength={20}
               />
-              {categoria.id !== "edicao" && (
-                <>
-                  <Campo
-                    rotulo="Data desejada"
-                    type="date"
-                    min={hojeIso()}
-                    value={cliente.data}
-                    onChange={(e) => mudarCliente("data", e.target.value)}
-                    dica="Se ainda não souber, deixe em branco."
-                  />
-                  <Campo rotulo="Horário" type="time" value={cliente.horario} onChange={(e) => mudarCliente("horario", e.target.value)} dica="Aproximado, se souber." />
-                  <div className="sm:col-span-2">
-                    <Campo
-                      rotulo="Local"
-                      placeholder="Ex.: Parque Potycabana, Teresina"
-                      value={cliente.local}
-                      onChange={(e) => mudarCliente("local", e.target.value)}
-                      maxLength={120}
-                    />
-                  </div>
-                </>
-              )}
+              <Campo
+                rotulo="Data desejada"
+                type="date"
+                min={hojeIso()}
+                value={cliente.data}
+                onChange={(e) => mudarCliente("data", e.target.value)}
+                dica="Se ainda não souber, deixe em branco."
+              />
+              <Campo rotulo="Horário" type="time" value={cliente.horario} onChange={(e) => mudarCliente("horario", e.target.value)} dica="Aproximado, se souber." />
+              <div className="sm:col-span-2">
+                <Campo
+                  rotulo="Local"
+                  placeholder="Ex.: Parque Potycabana, Teresina"
+                  value={cliente.local}
+                  onChange={(e) => mudarCliente("local", e.target.value)}
+                  maxLength={120}
+                />
+              </div>
               <div className="sm:col-span-2">
                 <CampoTexto
                   rotulo="Observações"
@@ -318,6 +352,23 @@ export default function Montador() {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Deslocamentos({ cat, escolhido, aoEscolher }: { cat: Catalogo; escolhido: string; aoEscolher: (id: string) => void }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {cat.deslocamentos
+        .filter((d) => !d.legado)
+        .map((d) => (
+          <Opcao key={d.id} compacta selecionada={escolhido === d.id} aoEscolher={() => aoEscolher(d.id)}>
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold">{d.nome}</span>
+              <span className="text-sm text-suave">{d.aCombinar ? "a combinar" : d.preco ? `+ ${moeda(d.preco)}` : "sem custo"}</span>
+            </span>
+          </Opcao>
+        ))}
     </div>
   );
 }

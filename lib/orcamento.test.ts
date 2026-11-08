@@ -1,9 +1,9 @@
-// Testes das regras de preço, do sinal e da ida-e-volta do texto do WhatsApp.
+// Testes das regras de preço, prazos, sinal e da ida-e-volta do texto do WhatsApp.
 // Se algum destes quebrar depois de mexer no catálogo, confira se a regra de
 // negócio mudou de propósito antes de "consertar" o teste.
 
 import { describe, expect, it } from "vitest";
-import { CATALOGO, pacoteDisponivel, type Catalogo } from "./catalogo";
+import { CATALOGO, pacoteDisponivel, prazoPorFotos } from "./catalogo";
 import {
   calcular,
   codificarReferencia,
@@ -11,9 +11,11 @@ import {
   gerarMensagem,
   lerTextoColado,
   novoCodigo,
+  prazoEntrega,
   selecaoVazia,
   valorSinal,
   type DadosCliente,
+  type Selecao,
 } from "./orcamento";
 
 const cliente: DadosCliente = {
@@ -25,37 +27,41 @@ const cliente: DadosCliente = {
   observacoes: "Aniversário de 1 ano\ncom tema [safari]",
 };
 
-/** Catálogo com o lançamento do Essencial alterado (o resto igual). */
-function comLancamento(mudanca: { ativo?: boolean; vagasRestantes?: number }): Catalogo {
-  return {
-    ...CATALOGO,
-    pacotes: CATALOGO.pacotes.map((p) => (p.lancamento ? { ...p, lancamento: { ...p.lancamento, ...mudanca } } : p)),
-  };
-}
+const ensaio = (extra: Partial<Selecao>): Selecao => ({ ...selecaoVazia("ensaio"), ...extra });
+const evento = (extra: Partial<Selecao>): Selecao => ({ ...selecaoVazia("evento"), ...extra });
+const total = (sel: Selecao) => calcular(sel, CATALOGO).total;
 
-describe("calcular", () => {
-  it("soma pacote, hora extra de evento (R$70), fotos extras com preço de volume, entrega e deslocamento", () => {
-    const sel = { ...selecaoVazia("evento"), pacoteId: "ev-padrao3", horasExtras: 1, fotosExtras: 10, entregaId: "4d", deslocamentoId: "10a20" };
-    const c = calcular(sel, CATALOGO);
-    // 350 + 70 + 10×11 + 90 + 25
-    expect(c.total).toBe(645);
+describe("pacotes fechados", () => {
+  it("valores dos pacotes de ensaio e evento", () => {
+    expect(total(ensaio({ pacoteId: "en-rapida" }))).toBe(75);
+    expect(total(ensaio({ pacoteId: "en-mini" }))).toBe(100);
+    expect(total(ensaio({ pacoteId: "en-padrao" }))).toBe(200);
+    expect(total(ensaio({ pacoteId: "en-completo" }))).toBe(330);
+    expect(total(evento({ pacoteId: "ev-essencial" }))).toBe(150);
+    expect(total(evento({ pacoteId: "ev-padrao3" }))).toBe(250);
+    expect(total(evento({ pacoteId: "ev-completo" }))).toBe(360);
+  });
+
+  it("soma pacote, hora extra de evento (R$45), fotos extras, expressa e deslocamento", () => {
+    const c = calcular(evento({ pacoteId: "ev-padrao3", horasExtras: 1, fotosExtras: 10, entregaId: "ev24", deslocamentoId: "10a20" }), CATALOGO);
+    // 250 + 45 + 10×12 + 60 + 25
+    expect(c.total).toBe(500);
     expect(c.pendencias).toEqual([]);
     expect(c.totalEhMinimo).toBe(false);
   });
 
-  it("cobra R$13 por foto extra abaixo de 10 unidades", () => {
-    const c = calcular({ ...selecaoVazia("ensaio"), pacoteId: "en-mini", fotosExtras: 9 }, CATALOGO);
-    expect(c.total).toBe(100 + 9 * 13);
+  it("hora extra de ensaio é R$35", () => {
+    expect(total(ensaio({ pacoteId: "en-padrao", horasExtras: 2 }))).toBe(200 + 70);
   });
 
-  it("usa a hora extra de ensaio (R$60), não a de evento", () => {
-    const c = calcular({ ...selecaoVazia("ensaio"), pacoteId: "en-padrao", horasExtras: 2 }, CATALOGO);
-    expect(c.total).toBe(200 + 120);
+  it("foto extra: R$12; no ensaio, todas a R$10 a partir de 15", () => {
+    expect(total(ensaio({ pacoteId: "en-mini", fotosExtras: 14 }))).toBe(100 + 14 * 12);
+    expect(total(ensaio({ pacoteId: "en-mini", fotosExtras: 15 }))).toBe(100 + 15 * 10);
   });
 
-  it("pacotes de evento: Padrão R$350 e Completo R$480", () => {
-    expect(calcular({ ...selecaoVazia("evento"), pacoteId: "ev-padrao3" }, CATALOGO).total).toBe(350);
-    expect(calcular({ ...selecaoVazia("evento"), pacoteId: "ev-completo" }, CATALOGO).total).toBe(480);
+  it("foto extra no evento: R$12 até 49, todas a R$10 a partir de 50", () => {
+    expect(total(evento({ pacoteId: "ev-padrao3", fotosExtras: 49 }))).toBe(250 + 49 * 12);
+    expect(total(evento({ pacoteId: "ev-padrao3", fotosExtras: 50 }))).toBe(250 + 50 * 10);
   });
 
   it("pede pacote quando a categoria tem sessão", () => {
@@ -63,76 +69,108 @@ describe("calcular", () => {
   });
 
   it("deslocamento em faixas entra no total; acima de 30 km fica a combinar", () => {
-    const base = { ...selecaoVazia("ensaio"), pacoteId: "en-mini" };
-    expect(calcular({ ...base, deslocamentoId: "10a20" }, CATALOGO).total).toBe(125);
-    expect(calcular({ ...base, deslocamentoId: "20a30" }, CATALOGO).total).toBe(145);
-    const longe = calcular({ ...base, deslocamentoId: "acima30" }, CATALOGO);
+    expect(total(ensaio({ pacoteId: "en-mini", deslocamentoId: "10a20" }))).toBe(125);
+    expect(total(ensaio({ pacoteId: "en-mini", deslocamentoId: "20a30" }))).toBe(145);
+    const longe = calcular(ensaio({ pacoteId: "en-mini", deslocamentoId: "acima30" }), CATALOGO);
     expect(longe.total).toBe(100);
     expect(longe.totalEhMinimo).toBe(true);
   });
+});
 
-  it("ensaio não cobra fotos brutas nem Expressa 24h (são só de evento)", () => {
-    const c = calcular({ ...selecaoVazia("ensaio"), pacoteId: "en-mini", fotosBrutas: 20, entregaId: "1d" }, CATALOGO);
-    expect(c.total).toBe(100);
-    expect(c.linhas).toHaveLength(1);
+describe("prazo de entrega por pacote", () => {
+  const prazo = (sel: Selecao) => prazoEntrega(sel, CATALOGO)?.detalhe;
+
+  it("cada pacote tem o próprio prazo padrão, sem custo", () => {
+    expect(prazo(ensaio({ pacoteId: "en-rapida" }))).toBe("em até 6h");
+    expect(prazo(ensaio({ pacoteId: "en-mini" }))).toBe("em até 8h");
+    expect(prazo(ensaio({ pacoteId: "en-padrao" }))).toBe("em até 24h");
+    expect(prazo(ensaio({ pacoteId: "en-completo" }))).toBe("2–3 dias úteis");
+    expect(prazo(evento({ pacoteId: "ev-essencial" }))).toBe("1–2 dias");
+    expect(prazo(evento({ pacoteId: "ev-padrao3" }))).toBe("2–4 dias");
+    expect(prazo(evento({ pacoteId: "ev-completo" }))).toMatch(/^3–5 dias úteis, com entregas parciais/);
   });
 
-  it("evento cobra fotos brutas (mínimo de 20) e Expressa 24h a R$60", () => {
-    const c = calcular({ ...selecaoVazia("evento"), pacoteId: "ev-padrao3", fotosBrutas: 20, entregaId: "1d" }, CATALOGO);
-    expect(c.total).toBe(350 + 20 * 5 + 60);
-    const poucas = calcular({ ...selecaoVazia("evento"), pacoteId: "ev-padrao3", fotosBrutas: 5 }, CATALOGO);
-    expect(poucas.pendencias.join()).toMatch(/mínimo de 20/);
+  it("expressas só no pacote que oferece: ensaio Completo +40 (36h) ou +50 (24h)", () => {
+    expect(total(ensaio({ pacoteId: "en-completo", entregaId: "x36" }))).toBe(370);
+    expect(total(ensaio({ pacoteId: "en-completo", entregaId: "x24" }))).toBe(380);
+    // Pacote que não oferece a expressa: volta ao prazo padrão, sem cobrar.
+    expect(total(ensaio({ pacoteId: "en-mini", entregaId: "x24" }))).toBe(100);
   });
 
-  it("auxiliar é 'a partir de' por diária e ignora escolhas de outras abas", () => {
-    const sel = { ...selecaoVazia("auxiliar"), diariasAuxiliar: 2, pacoteId: "ev-padrao3", horasExtras: 3 };
-    const c = calcular(sel, CATALOGO);
-    expect(c.total).toBe(200);
-    expect(c.linhas).toHaveLength(1);
-    expect(c.totalEhMinimo).toBe(true);
+  it("evento: Padrão expressa 24h +60, Completo expressa 1–3 dias +80", () => {
+    expect(total(evento({ pacoteId: "ev-padrao3", entregaId: "ev24" }))).toBe(310);
+    expect(total(evento({ pacoteId: "ev-completo", entregaId: "ev13" }))).toBe(440);
+    expect(total(evento({ pacoteId: "ev-essencial", entregaId: "ev24" }))).toBe(150);
   });
 
-  it("edição avulsa soma edição e retoque", () => {
-    const c = calcular({ ...selecaoVazia("edicao"), edicoes: 3, retoques: 1 }, CATALOGO);
-    expect(c.total).toBe(3 * 5 + 10);
-  });
-
-  it("ainda lê pacotes e deslocamentos da tabela antiga (orçamentos em circulação)", () => {
-    expect(calcular({ ...selecaoVazia("evento"), pacoteId: "ev-curta" }, CATALOGO).total).toBe(350);
-    expect(calcular({ ...selecaoVazia("evento"), pacoteId: "ev-curta", deslocamentoId: "acima10" }, CATALOGO).totalEhMinimo).toBe(true);
+  it("Personalizado: prazo pela quantidade de fotos", () => {
+    expect(prazoPorFotos(5, CATALOGO)).toBe("em até 24h");
+    expect(prazoPorFotos(10, CATALOGO)).toBe("em até 24h");
+    expect(prazoPorFotos(11, CATALOGO)).toBe("36–48 horas");
+    expect(prazoPorFotos(30, CATALOGO)).toBe("36–48 horas");
+    expect(prazoPorFotos(31, CATALOGO)).toBe("3 dias");
+    expect(prazoPorFotos(50, CATALOGO)).toBe("3 dias");
+    expect(prazoPorFotos(51, CATALOGO)).toBe("3–5 dias, com entregas parciais");
+    expect(prazo(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 2, fotosPersonalizado: 20 }))).toBe("36–48 horas");
   });
 });
 
-describe("pacotes especiais", () => {
-  const essencial = { ...selecaoVazia("evento"), pacoteId: "ev-essencial" };
-
-  it("Essencial sai a R$150 enquanto houver vagas de lançamento, com sinal e total no preço vigente", () => {
-    const c = calcular(essencial, CATALOGO);
-    expect(c.total).toBe(150);
-    expect(c.sinal).toBe(60);
-    expect(c.linhas[0].descricao).toMatch(/preço de lançamento/);
+describe("Personalizado", () => {
+  it("ensaio: horas × R$30 + fotos × R$12 (todas a R$10 a partir de 15)", () => {
+    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 2, fotosPersonalizado: 10 }))).toBe(60 + 120);
+    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 2, fotosPersonalizado: 15 }))).toBe(60 + 150);
   });
 
-  it("Essencial volta a R$250 quando as vagas acabam ou o lançamento é desligado", () => {
-    for (const cat of [comLancamento({ vagasRestantes: 0 }), comLancamento({ ativo: false })]) {
-      const c = calcular(essencial, cat);
-      expect(c.total).toBe(250);
-      expect(c.sinal).toBe(100);
-      expect(c.linhas[0].descricao).not.toMatch(/lançamento/);
-    }
+  it("evento: horas × R$45 + fotos × R$12 (todas a R$10 a partir de 50)", () => {
+    expect(total(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 49 }))).toBe(135 + 588);
+    expect(total(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 50 }))).toBe(135 + 500);
   });
 
-  it("Sessão Rápida (R$75) some do montador quando desativada", () => {
-    const rapida = CATALOGO.pacotes.find((p) => p.id === "en-rapida")!;
-    expect(calcular({ ...selecaoVazia("ensaio"), pacoteId: "en-rapida" }, CATALOGO).total).toBe(75);
-    expect(pacoteDisponivel(rapida)).toBe(rapida.ativo !== false);
-    expect(pacoteDisponivel({ ...rapida, ativo: false })).toBe(false);
+  it("mínimos: 1h; 5 fotos no ensaio e 20 no evento", () => {
+    expect(calcular(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 4 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 5 fotos/);
+    expect(calcular(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 1, fotosPersonalizado: 19 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 20 fotos/);
+    expect(calcular(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 0, fotosPersonalizado: 20 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 1h/);
+    expect(calcular(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 5 }), CATALOGO).pendencias).toEqual([]);
   });
 
-  it("pacotes da tabela antiga nunca aparecem no montador", () => {
-    const legados = CATALOGO.pacotes.filter((p) => p.legado);
-    expect(legados.length).toBeGreaterThan(0);
-    expect(legados.some(pacoteDisponivel)).toBe(false);
+  it("não tem hora extra nem foto extra; pacote fechado ignora horas/fotos do Personalizado", () => {
+    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 5, horasExtras: 3, fotosExtras: 10 }))).toBe(30 + 60);
+    expect(total(ensaio({ pacoteId: "en-mini", horasPersonalizado: 5, fotosPersonalizado: 50 }))).toBe(100);
+  });
+});
+
+describe("fotógrafo auxiliar", () => {
+  const aux = (extra: Partial<Selecao>): Selecao => ({ ...selecaoVazia("auxiliar"), ...extra });
+
+  it("R$90 por diária com alimentação e transporte inclusos, sem deslocamento", () => {
+    const c = calcular(aux({ diariasAuxiliar: 2, modoAuxiliar: "com", deslocamentoId: "20a30", pacoteId: "ev-padrao3" }), CATALOGO);
+    expect(c.total).toBe(180);
+    expect(c.linhas).toHaveLength(1);
+    expect(c.totalEhMinimo).toBe(false);
+  });
+
+  it("R$120 por diária sem alimentação e transporte, mais o deslocamento pela distância", () => {
+    expect(total(aux({ diariasAuxiliar: 1, modoAuxiliar: "sem", deslocamentoId: "20a30" }))).toBe(165);
+    expect(calcular(aux({ diariasAuxiliar: 1, modoAuxiliar: "sem", deslocamentoId: "acima30" }), CATALOGO).totalEhMinimo).toBe(true);
+  });
+});
+
+describe("tabela antiga e o que saiu do site", () => {
+  it("pacotes, serviços e opções antigos nunca aparecem no montador", () => {
+    expect(CATALOGO.pacotes.filter((p) => p.legado).some(pacoteDisponivel)).toBe(false);
+    expect(CATALOGO.categorias.find((c) => c.id === "edicao")?.legado).toBe(true);
+  });
+
+  it("o painel ainda lê orçamentos antigos (pacotes, entrega e deslocamento da v2/v3, edição de fotos)", () => {
+    expect(total(evento({ pacoteId: "ev-curta" }))).toBe(350);
+    expect(total(evento({ pacoteId: "ev-padrao3", entregaId: "4d" }))).toBe(250 + 90);
+    expect(calcular(evento({ pacoteId: "ev-curta", deslocamentoId: "acima10" }), CATALOGO).totalEhMinimo).toBe(true);
+    expect(total({ ...selecaoVazia("edicao"), edicoes: 3, retoques: 1 })).toBe(3 * 5 + 10);
+  });
+
+  it("fotos brutas (fb) de orçamentos antigos são ignoradas", () => {
+    const ref = decodificarReferencia("[ref EJ-7K2M9 v3 em=2026-10-09 c=evento p=ev-padrao3 fb=20]");
+    expect(ref && total(ref.selecao)).toBe(250);
   });
 });
 
@@ -140,34 +178,37 @@ describe("sinal", () => {
   it("é 40% do total, arredondado para cima em reais inteiros", () => {
     expect(valorSinal(250, 40)).toBe(100);
     expect(valorSinal(263, 40)).toBe(106); // 105,20
-    expect(valorSinal(217, 40)).toBe(87); // 86,80
+    expect(valorSinal(268, 40)).toBe(108); // 107,20
     expect(valorSinal(0, 40)).toBe(0);
   });
 
   it("sinal + restante = total", () => {
-    const c = calcular({ ...selecaoVazia("ensaio"), pacoteId: "en-mini", fotosExtras: 9 }, CATALOGO);
-    expect(c.total).toBe(217);
-    expect(c.sinal).toBe(87);
-    expect(c.restante).toBe(130);
+    const c = calcular(ensaio({ pacoteId: "en-mini", fotosExtras: 14 }), CATALOGO);
+    expect(c.total).toBe(268);
+    expect(c.sinal).toBe(108);
+    expect(c.restante).toBe(160);
   });
 });
 
 describe("referência [ref]", () => {
-  it("vai e volta sem perder a escolha", () => {
-    const selecao = { ...selecaoVazia("evento"), pacoteId: "ev-padrao3", horasExtras: 2, fotosBrutas: 20, entregaId: "1d", deslocamentoId: "10a20" };
-    const linha = codificarReferencia({
-      codigo: "EJ-7K2M9",
-      versao: 3,
-      emitidoEm: "2026-10-09",
-      selecao,
-      data: "2026-12-15",
-      horario: "16:00",
-    });
-    expect(linha).not.toContain("ax="); // diárias de auxiliar não pertencem a um evento
-    const volta = decodificarReferencia(`texto qualquer\n${linha}\nmais texto`);
+  const ida = (selecao: Selecao) =>
+    decodificarReferencia(
+      `texto\n${codificarReferencia({ codigo: "EJ-7K2M9", versao: 4, emitidoEm: "2026-10-09", selecao, data: "2026-12-15", horario: "16:00" })}\nmais`,
+    );
+
+  it("vai e volta sem perder a escolha (pacote fechado com expressa)", () => {
+    const selecao = evento({ pacoteId: "ev-padrao3", horasExtras: 2, entregaId: "ev24", deslocamentoId: "10a20" });
+    const volta = ida(selecao);
     expect(volta?.selecao).toEqual({ ...selecao, diariasAuxiliar: 0 });
     expect(volta?.data).toBe("2026-12-15");
     expect(volta?.horario).toBe("16:00");
+  });
+
+  it("vai e volta com Personalizado e com auxiliar sem transporte", () => {
+    const pers = evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 40 });
+    expect(ida(pers)?.selecao).toEqual({ ...pers, diariasAuxiliar: 0 });
+    const aux = { ...selecaoVazia("auxiliar"), diariasAuxiliar: 2, modoAuxiliar: "sem" as const, deslocamentoId: "10a20" };
+    expect(ida(aux)?.selecao).toEqual(aux);
   });
 
   it("recusa referência malformada", () => {
@@ -182,20 +223,20 @@ describe("referência [ref]", () => {
 });
 
 describe("mensagem do WhatsApp → painel", () => {
-  const selecao = { ...selecaoVazia("evento"), pacoteId: "ev-padrao3", horasExtras: 1, entregaId: "4d" };
-  const texto = gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao, cliente }, CATALOGO);
+  const msg = (selecao: Selecao) => gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao, cliente }, CATALOGO);
+  const texto = msg(evento({ pacoteId: "ev-padrao3", horasExtras: 1, entregaId: "ev24" }));
 
   it("traz serviço, adicionais, deslocamento, entrega, total, sinal e restante", () => {
     expect(texto).toContain("*Serviço:* Evento pequeno — Padrão");
-    expect(texto).toContain("• Hora extra em campo — R$ 70,00");
+    expect(texto).toContain("• Hora extra em campo — R$ 45,00");
     expect(texto).toContain("*Deslocamento:* Até 10 km de Teresina — sem custo");
-    expect(texto).toContain("*Entrega:* Expressa 4 dias (até 4 dias) — R$ 90,00");
+    expect(texto).toContain("*Entrega:* Expressa 24h (em até 24h) — R$ 60,00");
     // Entrega e deslocamento saem só nas linhas próprias, sem repetir na lista de itens.
     expect(texto).not.toMatch(/• (Entrega|Deslocamento)/);
-    // 350 + 70 + 90 = 510 → sinal 204, restante 306
-    expect(texto).toContain("*Total:* R$ 510,00");
-    expect(texto).toContain("*Sinal (40%):* R$ 204,00");
-    expect(texto).toContain("*Restante:* R$ 306,00");
+    // 250 + 45 + 60 = 355 → sinal 142, restante 213
+    expect(texto).toContain("*Total:* R$ 355,00");
+    expect(texto).toContain("*Sinal (40%):* R$ 142,00");
+    expect(texto).toContain("*Restante:* R$ 213,00");
     expect(texto).toContain("*Data desejada:* 15/12/2026 às 16:00");
     expect(texto).toContain("*Local:* Parque da Cidadania");
     expect(texto).toContain("Válido até 16/10/2026");
@@ -203,13 +244,19 @@ describe("mensagem do WhatsApp → painel", () => {
     expect(texto).toContain("*Observações:* Aniversário de 1 ano com tema safari");
   });
 
-  it("no ensaio, não leva Expressa 24h nem fotos brutas que sobraram de outra aba", () => {
-    const sel = { ...selecaoVazia("ensaio"), pacoteId: "en-mini", entregaId: "1d", fotosBrutas: 20 };
-    const t = gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao: sel, cliente }, CATALOGO);
-    expect(t).toContain("*Entrega:* Prazo padrão (até 10 dias) — incluso");
-    expect(t).not.toContain("en=1d");
-    expect(t).not.toContain("fb=");
-    expect(t).toContain("*Total:* R$ 100,00");
+  it("Personalizado: itens de horas e fotos e o prazo pela quantidade de fotos", () => {
+    const t = msg(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 2, fotosPersonalizado: 20 }));
+    expect(t).toContain("• Personalizado: horas de cobertura × 2 — R$ 90,00");
+    expect(t).toContain("• Personalizado: fotos editadas × 20 — R$ 240,00");
+    expect(t).toContain("*Entrega:* Prazo padrão (36–48 horas) — incluso");
+    expect(t).toContain("*Total:* R$ 330,00");
+  });
+
+  it("auxiliar com transporte incluso: sem linhas de entrega e deslocamento", () => {
+    const t = msg({ ...selecaoVazia("auxiliar"), diariasAuxiliar: 1 });
+    expect(t).not.toContain("*Entrega:*");
+    expect(t).not.toContain("*Deslocamento:*");
+    expect(t).toContain("*Total:* R$ 90,00");
   });
 
   it("o painel lê de volta os dados do cliente e o valor, sem avisos", () => {
@@ -219,25 +266,15 @@ describe("mensagem do WhatsApp → painel", () => {
     expect(r.leitura.cliente.telefone).toBe("(86) 98888-7777");
     expect(r.leitura.cliente.local).toBe("Parque da Cidadania");
     expect(r.leitura.cliente.data).toBe("2026-12-15");
-    expect(r.leitura.calculo.total).toBe(510);
-    expect(r.leitura.calculo.sinal).toBe(204);
+    expect(r.leitura.calculo.total).toBe(355);
+    expect(r.leitura.calculo.sinal).toBe(142);
     expect(r.leitura.avisos).toEqual([]);
   });
 
   it("avisa quando o cliente editou o total na conversa", () => {
-    const editado = texto.replace("*Total:* R$ 510,00", "*Total:* R$ 300,00");
-    const r = lerTextoColado(editado, CATALOGO);
+    const r = lerTextoColado(texto.replace("*Total:* R$ 355,00", "*Total:* R$ 300,00"), CATALOGO);
     if (!r.ok) throw new Error(r.erro);
-    expect(r.leitura.calculo.total).toBe(510);
-    expect(r.leitura.avisos.join()).toMatch(/não bate/);
-  });
-
-  it("avisa quando o Essencial foi orçado no lançamento e as vagas acabaram antes de colar", () => {
-    const sel = { ...selecaoVazia("evento"), pacoteId: "ev-essencial" };
-    const t = gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao: sel, cliente }, CATALOGO);
-    const r = lerTextoColado(t, comLancamento({ vagasRestantes: 0 }));
-    if (!r.ok) throw new Error(r.erro);
-    expect(r.leitura.calculo.total).toBe(250);
+    expect(r.leitura.calculo.total).toBe(355);
     expect(r.leitura.avisos.join()).toMatch(/não bate/);
   });
 
@@ -248,7 +285,6 @@ describe("mensagem do WhatsApp → painel", () => {
   });
 
   it("recusa texto sem a linha [ref]", () => {
-    const r = lerTextoColado("Oi, quero um orçamento", CATALOGO);
-    expect(r.ok).toBe(false);
+    expect(lerTextoColado("Oi, quero um orçamento", CATALOGO).ok).toBe(false);
   });
 });

@@ -1,10 +1,13 @@
 // Tabela de preços da Eluan Jesus Fotografia — fonte única de valores do site.
 //
 // Tudo que o cliente vê no montador e tudo que o painel recalcula sai daqui:
-// pacotes, adicionais, prazos, deslocamento, sinal, "Incluso" e "Bom saber".
+// pacotes, prazos, adicionais, deslocamento, auxiliar e sinal.
 // Mudou preço? Edite este arquivo E aumente `versao`: o código que vai no texto
 // do WhatsApp carrega a versão, e o painel avisa quando um orçamento foi gerado
 // com uma tabela anterior (o valor que o cliente viu pode não bater mais).
+//
+// Políticas (incluso, chuva, cancelamento, remarcação…) saíram do site na v4:
+// são cláusulas do contrato, enviado em PDF pelo WhatsApp.
 //
 // Fase 2 do plano: estes valores passam a ser editáveis pelo painel (Netlify
 // Blobs). Por isso o resto do código recebe o catálogo como parâmetro em vez de
@@ -12,25 +15,27 @@
 
 export type CategoriaId = "ensaio" | "evento" | "auxiliar" | "edicao";
 
+/** Preço da foto editada: o de volume vale para TODAS quando a quantidade atinge `volumeMin`. */
+export interface PrecoFoto {
+  preco: number;
+  precoVolume: number;
+  volumeMin: number;
+}
+
 export interface Categoria {
   id: CategoriaId;
   nome: string;
   descricao: string;
-  /** Valor da hora extra em campo; ausente = categoria sem hora extra. */
-  horaExtra?: number;
-  /** Prazo de entrega padrão, já incluso no preço. */
-  prazoPadrao?: string;
   /** Categoria com sessão de fotos: aceita pacote, hora extra, fotos extras, entrega e deslocamento. */
   temSessao: boolean;
-}
-
-/** Preço de lançamento de um pacote: vale enquanto `ativo` e houver vagas. */
-export interface Lancamento {
-  ativo: boolean;
-  valor: number;
-  /** Atualizado à mão aqui a cada evento fechado com o preço de lançamento. */
-  vagasRestantes: number;
-  aviso: string;
+  /** Valor da hora extra em campo nos pacotes fechados. */
+  horaExtra?: number;
+  /** Foto extra (pacotes fechados) e foto do Personalizado. */
+  foto?: PrecoFoto;
+  /** Pacote Personalizado: valor da hora de cobertura e mínimos. */
+  personalizado?: { valorHora: number; horasMin: number; fotosMin: number };
+  /** Saiu do site; continua aqui só para o painel ler orçamentos antigos. */
+  legado?: boolean;
 }
 
 export interface Pacote {
@@ -39,14 +44,20 @@ export interface Pacote {
   nome: string;
   duracao: string;
   entrega: string;
-  /** Preço cheio. O vigente sai de `precoDoPacote()` (considera o lançamento). */
   preco: number;
+  /** Prazo de entrega padrão (sem custo) deste pacote. */
+  prazo: string;
   destaque?: boolean;
   /** false = some do montador (o painel ainda lê orçamentos antigos com ele). Ausente = ativo. */
   ativo?: boolean;
   /** Aviso curto mostrado no cartão do pacote. */
   aviso?: string;
-  lancamento?: Lancamento;
+  /**
+   * Pacote montado pelo cliente: preço = horas × valor da hora + fotos × preço
+   * da foto (ver `Categoria.personalizado` e `Categoria.foto`). `preco` e
+   * `prazo` não valem; o prazo sai de `prazoPorFotos()`.
+   */
+  personalizado?: boolean;
   /**
    * Pacote que saiu da tabela. Fica aqui só para o painel ler mensagens antigas
    * que ainda circulam (ids nunca são reaproveitados — ver MANUTENCAO §3). Pode
@@ -55,13 +66,14 @@ export interface Pacote {
   legado?: boolean;
 }
 
+/** Entrega expressa (o prazo padrão é o `prazo` do pacote, id "padrao"). */
 export interface OpcaoEntrega {
   id: string;
   nome: string;
   detalhe: string;
   preco: number;
-  /** Serviços em que a opção aparece. Ausente = todos com sessão. */
-  categorias?: CategoriaId[];
+  /** Pacotes que oferecem esta opção. Ausente = opção legada (só leitura de orçamentos antigos). */
+  pacotes?: string[];
 }
 
 export interface OpcaoDeslocamento {
@@ -74,18 +86,18 @@ export interface OpcaoDeslocamento {
   legado?: boolean;
 }
 
-/** Texto de "Incluso" ou "Bom saber". `categorias` ausente = vale para todos os serviços. */
-export interface ItemTexto {
-  titulo?: string;
-  texto: string;
-  categorias?: CategoriaId[];
+/** Prazo do Personalizado pela quantidade de fotos: vale a primeira faixa com `ateFotos` ≥ fotos. */
+export interface FaixaPrazo {
+  ateFotos: number;
+  prazo: string;
 }
 
-export interface FaixaCancelamento {
-  /** A faixa vale quando o aviso chega com pelo menos `diasMin` dias de antecedência. */
-  diasMin: number;
-  /** Percentual do valor total que fica com o fotógrafo. */
-  percentualRetido: number;
+export interface ModoAuxiliar {
+  id: "com" | "sem";
+  nome: string;
+  diaria: number;
+  /** Cobra deslocamento (transporte por conta do fotógrafo fora de Teresina). */
+  cobraDeslocamento: boolean;
 }
 
 export interface Catalogo {
@@ -95,51 +107,29 @@ export interface Catalogo {
   contato: { nome: string; whatsapp: string; cidade: string; instagram: string };
   categorias: Categoria[];
   pacotes: Pacote[];
-  fotoExtra: { preco: number; precoVolume: number; volumeMin: number };
-  fotoBruta: { preco: number; minimo: number; categorias: CategoriaId[]; aviso: string };
-  edicaoCliente: number;
-  retoquePesado: number;
+  /** Ordenadas pela quantidade de fotos; a última deve cobrir qualquer quantidade. */
+  prazosPersonalizado: FaixaPrazo[];
   entregas: OpcaoEntrega[];
   deslocamentos: OpcaoDeslocamento[];
-  auxiliar: { aPartirDe: number; observacao: string };
+  auxiliar: { modos: ModoAuxiliar[]; observacao: string };
+  /** Só para ler orçamentos antigos de "Edição de fotos" e retoque pesado (saíram na v4). */
+  legadoEdicao: { edicaoCliente: number; retoquePesado: number };
   /** Percentual do total cobrado como sinal; arredondado para cima em reais inteiros. */
   sinalPercentual: number;
   reserva: string;
-  /** Até quantas horas antes da sessão a remarcação por chuva é decidida. */
-  chuvaHorasAntes: number;
-  cancelamento: {
-    /** Dias após assinar o contrato em que a desistência devolve tudo. */
-    devolucaoIntegralDias: number;
-    /** Ordenadas da maior antecedência para a menor; a última deve ter diasMin 0. */
-    faixas: FaixaCancelamento[];
-  };
   validadeDias: number;
-  incluso: ItemTexto[];
-  politicas: ItemTexto[];
 }
 
 const MARCA = { nome: "Eluan Jesus", complemento: "Fotografia" };
 const INSTAGRAM = "@eluan.jesus";
 
-// Valores das políticas que entram nos textos do "Bom saber" (e no contrato).
-const CHUVA_HORAS_ANTES = 3;
-const CANCELAMENTO = {
-  devolucaoIntegralDias: 7,
-  faixas: [
-    { diasMin: 31, percentualRetido: 10 }, // mais de 30 dias
-    { diasMin: 8, percentualRetido: 15 }, // de 30 a 8 dias
-    { diasMin: 0, percentualRetido: 20 }, // 7 dias ou menos
-  ],
-};
-const retidos = CANCELAMENTO.faixas.map((f) => f.percentualRetido);
-
 export const CATALOGO: Catalogo = {
-  // v3 (08/11/2026): eventos Essencial/Padrão/Completo (Essencial com preço de
-  // lançamento), Sessão Rápida, ensaio Mini R$100 e Padrão R$200, hora extra de
-  // evento R$70, fotos brutas só em evento, Expressa 24h só em evento (+R$60),
-  // deslocamento em faixas e sinal fixo de 40%.
-  // v2 (09/10/2026): edição de foto do cliente R$22→R$5 e retoque pesado R$35→R$10.
-  versao: 3,
+  // v4 (08/11/2026): prazo de entrega por pacote, Personalizado (horas + fotos),
+  // ensaio hora extra R$35, evento Padrão R$250 / Completo R$360 / hora extra
+  // R$45, foto extra R$12 (R$10 a partir de 15 no ensaio e 50 no evento), auxiliar
+  // R$90/R$120, sem lançamento, sem fotos brutas, sem retoque e sem "Edição de fotos".
+  // v3: eventos novos, Sessão Rápida, sinal 40%, deslocamento em faixas.
+  versao: 4,
   marca: MARCA,
   contato: {
     nome: `${MARCA.nome} ${MARCA.complemento}`,
@@ -153,17 +143,19 @@ export const CATALOGO: Catalogo = {
       id: "ensaio",
       nome: "Ensaio ao ar livre",
       descricao: "Individual, casal, família, gestante ou formatura infantil",
-      horaExtra: 60,
-      prazoPadrao: "até 10 dias",
       temSessao: true,
+      horaExtra: 35,
+      foto: { preco: 12, precoVolume: 10, volumeMin: 15 },
+      personalizado: { valorHora: 30, horasMin: 1, fotosMin: 5 },
     },
     {
       id: "evento",
       nome: "Evento pequeno",
       descricao: "Aniversários, chás de bebê, eventos casuais e formaturas pequenas",
-      horaExtra: 70,
-      prazoPadrao: "até 10 dias",
       temSessao: true,
+      horaExtra: 45,
+      foto: { preco: 12, precoVolume: 10, volumeMin: 50 },
+      personalizado: { valorHora: 45, horasMin: 1, fotosMin: 20 },
     },
     {
       id: "auxiliar",
@@ -176,6 +168,7 @@ export const CATALOGO: Catalogo = {
       nome: "Edição de fotos",
       descricao: "Você já tem as fotos e quer o tratamento profissional",
       temSessao: false,
+      legado: true,
     },
   ],
   pacotes: [
@@ -186,54 +179,94 @@ export const CATALOGO: Catalogo = {
       duracao: "15 min · 1 local fixo definido pelo fotógrafo",
       entrega: "5 fotos",
       preco: 75,
+      prazo: "em até 6h",
       // Agenda coletiva (vários clientes no mesmo local e dia). false esconde o pacote.
       ativo: true,
       aviso: `Disponível apenas em datas especiais divulgadas no Instagram ${INSTAGRAM}.`,
     },
-    { id: "en-mini", categoria: "ensaio", nome: "Mini", duracao: "30 min · 1 local", entrega: "15–20 fotos", preco: 100 },
-    { id: "en-padrao", categoria: "ensaio", nome: "Padrão", duracao: "1h · até 2 looks", entrega: "30–40 fotos", preco: 200, destaque: true },
-    { id: "en-completo", categoria: "ensaio", nome: "Completo", duracao: "1h30–2h · vários locais", entrega: "50–70 fotos", preco: 330 },
-
-    // Ids novos de propósito: "ev-padrao" já existia com outro conteúdo (3h–4h30).
+    { id: "en-mini", categoria: "ensaio", nome: "Mini", duracao: "30 min · 1 local", entrega: "15–20 fotos", preco: 100, prazo: "em até 8h" },
     {
-      id: "ev-essencial",
-      categoria: "evento",
-      nome: "Essencial",
-      duracao: "até 1h30 de cobertura",
-      entrega: "30 fotos",
-      preco: 250,
-      lancamento: {
-        ativo: true,
-        valor: 150,
-        vagasRestantes: 5,
-        aviso: "Preço de lançamento para os primeiros 5 eventos, mediante autorização de uso das fotos no portfólio.",
-      },
+      id: "en-padrao",
+      categoria: "ensaio",
+      nome: "Padrão",
+      duracao: "1h · até 2 looks",
+      entrega: "30–40 fotos",
+      preco: 200,
+      prazo: "em até 24h",
+      destaque: true,
     },
-    { id: "ev-padrao3", categoria: "evento", nome: "Padrão", duracao: "até 2h30 de cobertura", entrega: "50–60 fotos", preco: 350, destaque: true },
-    { id: "ev-completo", categoria: "evento", nome: "Completo", duracao: "até 3h30 de cobertura", entrega: "80–100 fotos", preco: 480 },
+    {
+      id: "en-completo",
+      categoria: "ensaio",
+      nome: "Completo",
+      duracao: "1h30–2h · vários locais",
+      entrega: "50–70 fotos",
+      preco: 330,
+      prazo: "2–3 dias úteis",
+    },
+    {
+      id: "en-personalizado",
+      categoria: "ensaio",
+      nome: "Personalizado",
+      duracao: "Você escolhe as horas",
+      entrega: "Você escolhe quantas fotos",
+      preco: 0,
+      prazo: "",
+      personalizado: true,
+    },
+
+    { id: "ev-essencial", categoria: "evento", nome: "Essencial", duracao: "até 1h30 de cobertura", entrega: "30 fotos", preco: 150, prazo: "1–2 dias" },
+    {
+      id: "ev-padrao3",
+      categoria: "evento",
+      nome: "Padrão",
+      duracao: "até 2h30 de cobertura",
+      entrega: "50–60 fotos",
+      preco: 250,
+      prazo: "2–4 dias",
+      destaque: true,
+    },
+    {
+      id: "ev-completo",
+      categoria: "evento",
+      nome: "Completo",
+      duracao: "até 3h30 de cobertura",
+      entrega: "80–100 fotos",
+      preco: 360,
+      prazo: "3–5 dias úteis, com entregas parciais ao longo dos dias",
+    },
+    {
+      id: "ev-personalizado",
+      categoria: "evento",
+      nome: "Personalizado",
+      duracao: "Você escolhe as horas",
+      entrega: "Você escolhe quantas fotos",
+      preco: 0,
+      prazo: "",
+      personalizado: true,
+    },
 
     // Tabela v2: só para ler orçamentos antigos no painel.
-    { id: "ev-express", categoria: "evento", nome: "Express", duracao: "até 1h30", entrega: "30–40 fotos", preco: 250, legado: true },
-    { id: "ev-curta", categoria: "evento", nome: "Curta", duracao: "até 2h30", entrega: "60–80 fotos", preco: 350, legado: true },
-    { id: "ev-padrao", categoria: "evento", nome: "Padrão", duracao: "3h–4h30", entrega: "100–130 fotos", preco: 530, legado: true },
-    { id: "ev-estendida", categoria: "evento", nome: "Estendida", duracao: "5h–6h", entrega: "150–200 fotos", preco: 750, legado: true },
+    { id: "ev-express", categoria: "evento", nome: "Express", duracao: "até 1h30", entrega: "30–40 fotos", preco: 250, prazo: "até 10 dias", legado: true },
+    { id: "ev-curta", categoria: "evento", nome: "Curta", duracao: "até 2h30", entrega: "60–80 fotos", preco: 350, prazo: "até 10 dias", legado: true },
+    { id: "ev-padrao", categoria: "evento", nome: "Padrão", duracao: "3h–4h30", entrega: "100–130 fotos", preco: 530, prazo: "até 10 dias", legado: true },
+    { id: "ev-estendida", categoria: "evento", nome: "Estendida", duracao: "5h–6h", entrega: "150–200 fotos", preco: 750, prazo: "até 10 dias", legado: true },
   ],
-  // A partir de 10 unidades, TODAS as fotos extras saem pelo preço de volume
-  // (não só as que passam de 10). Vale igual para ensaio e evento.
-  fotoExtra: { preco: 13, precoVolume: 11, volumeMin: 10 },
-  fotoBruta: {
-    preco: 5,
-    minimo: 20,
-    categorias: ["evento"],
-    aviso: "Arquivos sem tratamento de cor e luz, entregues como saíram da câmera.",
-  },
-  edicaoCliente: 5,
-  retoquePesado: 10,
+  prazosPersonalizado: [
+    { ateFotos: 10, prazo: "em até 24h" },
+    { ateFotos: 30, prazo: "36–48 horas" },
+    { ateFotos: 50, prazo: "3 dias" },
+    { ateFotos: Number.POSITIVE_INFINITY, prazo: "3–5 dias, com entregas parciais" },
+  ],
   entregas: [
-    { id: "padrao", nome: "Prazo padrão", detalhe: "até 10 dias", preco: 0 },
+    { id: "x36", nome: "Expressa 36h", detalhe: "em até 36h", preco: 40, pacotes: ["en-completo"] },
+    { id: "x24", nome: "Expressa 24h", detalhe: "em até 24h", preco: 50, pacotes: ["en-completo"] },
+    { id: "ev24", nome: "Expressa 24h", detalhe: "em até 24h", preco: 60, pacotes: ["ev-padrao3"] },
+    { id: "ev13", nome: "Expressa", detalhe: "entrega completa em 1–3 dias", preco: 80, pacotes: ["ev-completo"] },
+    // Tabela v3 (sem `pacotes`): só para ler orçamentos antigos.
     { id: "6d", nome: "Expressa 6 dias", detalhe: "até 6 dias", preco: 60 },
     { id: "4d", nome: "Expressa 4 dias", detalhe: "até 4 dias", preco: 90 },
-    { id: "1d", nome: "Expressa 24h", detalhe: "até 1 dia depois", preco: 60, categorias: ["evento"] },
+    { id: "1d", nome: "Expressa 24h", detalhe: "até 1 dia depois", preco: 60 },
   ],
   deslocamentos: [
     { id: "ate10", nome: "Até 10 km de Teresina", preco: 0 },
@@ -243,39 +276,16 @@ export const CATALOGO: Catalogo = {
     { id: "acima10", nome: "Acima de 10 km", preco: 0, aCombinar: true, legado: true },
   ],
   auxiliar: {
-    aPartirDe: 100,
-    observacao: "Valor final depende de locomoção, equipamentos e duração.",
+    modos: [
+      { id: "com", nome: "Com alimentação e transporte inclusos", diaria: 90, cobraDeslocamento: false },
+      { id: "sem", nome: "Sem alimentação e transporte", diaria: 120, cobraDeslocamento: true },
+    ],
+    observacao: "Fora de Teresina e sem transporte oferecido, o deslocamento é cobrado pela distância.",
   },
+  legadoEdicao: { edicaoCliente: 5, retoquePesado: 10 },
   sinalPercentual: 40,
   reserva: "A data fica reservada após a assinatura do contrato pelo gov.br e o pagamento do sinal via Pix.",
-  chuvaHorasAntes: CHUVA_HORAS_ANTES,
-  cancelamento: CANCELAMENTO,
   validadeDias: 7,
-  incluso: [
-    { texto: "Alta resolução, sem marca d'água" },
-    { texto: "Tratamento de cor e luz" },
-    { texto: "Prévia em 48h (3–5 fotos)" },
-    { texto: "1 rodada de ajuste" },
-    { texto: "Entrega por link digital" },
-    { texto: "Prévia de 3 a 5 fotos editadas ainda durante o evento", categorias: ["evento"] },
-  ],
-  politicas: [
-    { titulo: "Remarcação", texto: "A 2ª remarcação, ou qualquer remarcação com menos de 48h, tem taxa de R$45." },
-    { titulo: "Reedição", texto: "Ajustes fora da rodada incluída ou do combinado: R$18 por foto." },
-    { titulo: "Entrega expressa", texto: "Sujeita à agenda da semana; confirmo a disponibilidade na conversa." },
-    {
-      titulo: "Chuva ou mau tempo",
-      texto: `Remarcação por clima não tem taxa. Eu avalio as condições e confirmo até ${CHUVA_HORAS_ANTES} horas antes; a nova data segue a disponibilidade da agenda.`,
-      categorias: ["ensaio"],
-    },
-    {
-      titulo: "Desistência e cancelamento",
-      texto:
-        `Até ${CANCELAMENTO.devolucaoIntegralDias} dias após assinar o contrato, você pode desistir e recebe de volta tudo o que pagou. ` +
-        `Depois desse prazo, fico com ${Math.min(...retidos)}% a ${Math.max(...retidos)}% do valor total, conforme a antecedência do aviso, ` +
-        "e devolvo o resto do sinal. Se preferir, em vez de cancelar, você pode remarcar e manter o sinal como crédito. Os detalhes estão no contrato.",
-    },
-  ],
 };
 
 /** Pacote que o cliente pode escolher no montador agora. */
@@ -283,23 +293,13 @@ export function pacoteDisponivel(p: Pacote): boolean {
   return !p.legado && p.ativo !== false;
 }
 
-/** Preço de lançamento valendo (ligado e com vagas) para o pacote, ou null. */
-export function lancamentoVigente(p: Pacote): Lancamento | null {
-  const l = p.lancamento;
-  return l && l.ativo && l.vagasRestantes > 0 ? l : null;
+/** Expressa disponível para o pacote escolhido (as legadas só valem para ler orçamentos antigos). */
+export function entregaValeNo(e: OpcaoEntrega, pacoteId: string | null): boolean {
+  return !!e.pacotes && !!pacoteId && e.pacotes.includes(pacoteId);
 }
 
-/** Preço que vale hoje para o pacote: o de lançamento enquanto houver vagas, senão o cheio. */
-export function precoDoPacote(p: Pacote): number {
-  return lancamentoVigente(p)?.valor ?? p.preco;
-}
-
-/** A opção de entrega existe para este serviço? */
-export function entregaValeNa(e: OpcaoEntrega, categoria: CategoriaId): boolean {
-  return !e.categorias || e.categorias.includes(categoria);
-}
-
-/** O texto (Incluso / Bom saber) vale para este serviço? */
-export function textoValeNa(t: ItemTexto, categoria: CategoriaId): boolean {
-  return !t.categorias || t.categorias.includes(categoria);
+/** Prazo do Personalizado pela quantidade de fotos. */
+export function prazoPorFotos(fotos: number, cat: Catalogo): string {
+  const faixas = cat.prazosPersonalizado;
+  return (faixas.find((f) => fotos <= f.ateFotos) ?? faixas[faixas.length - 1]).prazo;
 }

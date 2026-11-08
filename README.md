@@ -2,7 +2,7 @@
 
 Site com duas partes:
 
-- **Montador público (`/`)**: o cliente escolhe o serviço (ensaio, evento, fotógrafo auxiliar ou edição),
+- **Montador público (`/`)**: o cliente escolhe o serviço (ensaio, evento ou fotógrafo auxiliar),
   o pacote e os extras, vê o valor na hora e envia o orçamento pronto pelo WhatsApp.
 - **Painel (`/painel`, com login)**: você cola a mensagem recebida no WhatsApp e ela vira um agendamento,
   com etapas (Recebido → Confirmado → Sinal pago → Realizado → Prévia enviada → Entregue), valores,
@@ -28,8 +28,8 @@ O botão **Cópia** no painel baixa a agenda inteira em JSON. Vale guardar uma c
 
 **Sinal:** 40% do total, arredondado para cima (`sinalPercentual` em [lib/catalogo.ts](lib/catalogo.ts)).
 
-**Preço de lançamento do Essencial:** a cada evento fechado com ele, diminua `vagasRestantes` em
-[lib/catalogo.ts](lib/catalogo.ts) e publique. Em 0, o site volta sozinho ao preço cheio.
+**Prazos de entrega:** cada pacote tem o seu (`prazo`); as expressas ficam em `entregas`, com a lista de
+pacotes que as oferecem. O Personalizado usa `prazosPersonalizado` (pela quantidade de fotos).
 
 **Sessão Rápida:** troque `ativo` do pacote `en-rapida` para mostrar ou esconder no site.
 

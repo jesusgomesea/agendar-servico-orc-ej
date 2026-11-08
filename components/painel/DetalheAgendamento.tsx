@@ -34,11 +34,14 @@ interface Props {
   salvando: boolean;
 }
 
-/** Atalhos de cobrança de pós-venda, com os valores das políticas. */
+/**
+ * Atalhos de cobrança de pós-venda. Remarcação e reedição são cláusulas do
+ * contrato (saíram do site na tabela v4), mas continuam cobradas por aqui.
+ */
 const EXTRAS_RAPIDOS = [
   { descricao: "Remarcação", valor: 45 },
   { descricao: "Reedição (por foto)", valor: 18 },
-  { descricao: "Foto extra editada", valor: CATALOGO.fotoExtra.preco },
+  { descricao: "Foto extra editada", valor: CATALOGO.categorias.find((c) => c.id === "ensaio")?.foto?.preco ?? 12 },
 ];
 
 export default function DetalheAgendamento({ agendamento, aoFechar, aoSalvar, aoExcluir, salvando }: Props) {

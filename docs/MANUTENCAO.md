@@ -15,21 +15,21 @@ por [lib/orcamento.test.ts](../lib/orcamento.test.ts).
 
 | Regra | Onde |
 |---|---|
-| Preços, pacotes, extras, entregas, deslocamento, sinal, incluso, políticas | `CATALOGO` em [lib/catalogo.ts](../lib/catalogo.ts) |
+| Preços, pacotes, prazos, extras, deslocamento, auxiliar, sinal | `CATALOGO` em [lib/catalogo.ts](../lib/catalogo.ts) |
 | Nome de apresentação (cabeçalho, título, mensagem, login) | `MARCA` em `catalogo.ts` → `CATALOGO.marca` / `contato.nome` |
-| Foto extra: R$13; com 10 ou mais, **todas** saem a R$11 (ensaio e evento) | `precoFotoExtra()` |
-| Foto bruta: **só em evento**, 0 ou no mínimo 20 | `fotoBruta.categorias` + `normalizarSelecao()`; pendência em `calcular()` |
-| Hora extra: ensaio R$60 / evento R$70 | `Categoria.horaExtra` |
-| Essencial: preço de lançamento (R$150 em vez de R$250) enquanto `ativo` e `vagasRestantes > 0` | `Pacote.lancamento` + `precoDoPacote()` / `lancamentoVigente()` |
+| Hora extra: ensaio R$35 / evento R$45 (só nos pacotes fechados) | `Categoria.horaExtra` |
+| Foto editada (extra e Personalizado): R$12; **todas** a R$10 a partir de 15 (ensaio) ou 50 (evento) | `Categoria.foto` + `precoFoto()` |
+| Prazo de entrega: cada pacote tem o seu (`prazo`, id `"padrao"`, sem custo) | `Pacote.prazo` + `prazoEntrega()` |
+| Expressas só no pacote que oferece (ensaio Completo 36h +40 / 24h +50; evento Padrão 24h +60; evento Completo 1–3 dias +80) | `OpcaoEntrega.pacotes` + `entregaValeNo()`; `normalizarSelecao()` volta ao padrão |
+| Personalizado: horas × valor da hora (ensaio R$30, evento R$45) + fotos; mínimo 1h e 5 fotos (ensaio) / 20 (evento); sem hora extra nem foto extra | `Pacote.personalizado` + `Categoria.personalizado`; `calcular()` |
+| Prazo do Personalizado pelas fotos: até 10 → 24h · até 30 → 36–48h · até 50 → 3 dias · mais → 3–5 dias com parciais | `prazosPersonalizado` + `prazoPorFotos()` |
 | Sessão Rápida: aparece só com `ativo: true` (datas especiais de agenda coletiva) | `Pacote.ativo` + `pacoteDisponivel()` |
-| Expressa 24h: **só em evento** (+R$60) | `OpcaoEntrega.categorias` + `entregaValeNa()` |
 | Deslocamento: até 10 km grátis · 10–20 km +R$25 · 20–30 km +R$45 · acima de 30 km a combinar (fora do total) | `deslocamentos`; `aCombinar` → linha `tipo: "aCombinar"` |
-| Fotógrafo auxiliar: "a partir de R$100" por diária | linha `tipo: "aPartirDe"` |
+| Fotógrafo auxiliar: R$90/diária com alimentação e transporte; R$120 sem, mais deslocamento | `auxiliar.modos` (`cobraDeslocamento`) + `cobraDeslocamento()` |
 | Sinal: 40% do total, **arredondado para cima** em reais inteiros, em todos os serviços | `CATALOGO.sinalPercentual` + `valorSinal()`; gravado no agendamento (`sinalPercentual`) |
-| Chuva (só ensaio) e cancelamento: números nos textos do "Bom saber" | `chuvaHorasAntes`, `cancelamento` (os textos de `politicas` são montados com eles) |
-| Itens de "Incluso"/"Bom saber" que valem só para um serviço | `ItemTexto.categorias` (a página mostra o serviço entre parênteses) |
+| Saíram na v4 (só leitura de orçamentos antigos): "Edição de fotos", retoque pesado, fotos brutas, preço de lançamento | `Categoria.legado`, `legadoEdicao`; `fb` da `[ref]` é ignorado |
+| Incluso, chuva, cancelamento, remarcação, reedição: **cláusulas do contrato**, fora do site | atalhos de cobrança `EXTRAS_RAPIDOS` no detalhe do painel |
 | Validade do orçamento: 7 dias | `CATALOGO.validadeDias` |
-| Remarcação R$45 / reedição R$18 | texto em `politicas` + atalhos `EXTRAS_RAPIDOS` no detalhe |
 
 ## 3. A linha `[ref …]`, ou por que o painel não confia no total escrito
 
@@ -45,7 +45,9 @@ O cliente pode editar a mensagem no WhatsApp antes de enviar. Por isso a mensage
 | `v1` | versão do catálogo usada pelo cliente |
 | `em` | data em que o orçamento foi emitido |
 | `c` / `p` | categoria / pacote |
-| `he fe fb ed rt ax` | horas extras, fotos extras, fotos brutas, edições, retoques, diárias de auxiliar |
+| `he fe hp fp ax` | horas extras, fotos extras, horas e fotos do Personalizado, diárias de auxiliar |
+| `am=sem` | auxiliar sem alimentação e transporte (ausente = com) |
+| `ed rt fb` | só em orçamentos antigos (edição, retoque, fotos brutas); `fb` é ignorado |
 | `en` / `ds` | entrega / deslocamento (omitidos quando são o padrão) |
 | `dt` / `hr` | data / horário desejados |
 
@@ -58,15 +60,10 @@ renomeados: crie um id novo e marque o antigo com `legado: true` (some do montad
 Apague o legado só depois que os orçamentos velhos expirarem. Foi assim na tabela v3: os eventos novos
 são `ev-essencial`, `ev-padrao3` e `ev-completo`, porque `ev-padrao` já existia com outro conteúdo.
 
-**Preço de lançamento no painel:** o painel recalcula pela tabela de agora. Se as vagas acabarem entre o
-envio e a colagem, o total do Essencial sobe para o cheio e aparece o aviso "não bate". Ajuste no
-`valorCombinado` do agendamento. Qualquer outro desconto combinado na conversa também vai ali.
+**Descontos combinados na conversa:** o painel recalcula pela tabela de agora. Desconto ou valor
+fechado com o cliente vai no `valorCombinado` do agendamento.
 
 ## 4. Receitas
-
-**Atualizar as vagas de lançamento:** diminua `vagasRestantes` do Essencial em `catalogo.ts` a cada evento
-fechado com o preço de lançamento e publique. Em 0 (ou com `ativo: false`), o pacote volta sozinho ao preço
-cheio no site, no sinal e na mensagem. Não precisa aumentar `versao` só por isso.
 
 **Ligar/desligar a Sessão Rápida:** `ativo` do pacote `en-rapida` em `catalogo.ts`.
 
@@ -76,8 +73,9 @@ valores e precisam ser atualizados junto, de propósito.
 **Novo pacote:** acrescente em `pacotes` com um `id` novo e a `categoria` certa. O montador e o painel
 leem a lista. `destaque: true` mostra o selo "Mais escolhido".
 
-**Nova opção de entrega ou deslocamento:** acrescente em `entregas`/`deslocamentos`. O id `padrao` (entrega) e
-o id `ate10` (deslocamento) são os valores omitidos na `[ref]`. Não os renomeie.
+**Novo prazo ou expressa:** o prazo padrão é o `prazo` do pacote. Expressa nova vai em `entregas`, com id
+novo e `pacotes: [...]` dizendo onde aparece. O id `padrao` (entrega) e o `ate10` (deslocamento) são os
+valores omitidos na `[ref]`. Não os renomeie.
 
 **Nova categoria:** além do catálogo, ajuste o tipo `CategoriaId`, `CATEGORIAS_VALIDAS` e
 `normalizarSelecao()` em `orcamento.ts` (quais campos valem para ela), o ícone em `Montador.tsx` e os

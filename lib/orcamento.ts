@@ -10,8 +10,10 @@
 // O painel lê essa linha, refaz a conta com o catálogo e avisa se o total escrito
 // não bate. As linhas legíveis (Cliente, Local…) servem só para os dados pessoais.
 
-import { entregaValeNa, lancamentoVigente, precoDoPacote, type Catalogo, type CategoriaId } from "./catalogo";
+import { prazoPorFotos, type Catalogo, type Categoria, type CategoriaId, type OpcaoDeslocamento } from "./catalogo";
 import { dataBR, dataBRparaIso, dataIsoValida, lerMoeda, moeda, somarDias } from "./formato";
+
+export type ModoAuxiliarId = "com" | "sem";
 
 /** O que o cliente escolheu no montador. Quantidades zeradas = item não escolhido. */
 export interface Selecao {
@@ -19,12 +21,17 @@ export interface Selecao {
   pacoteId: string | null;
   horasExtras: number;
   fotosExtras: number;
-  fotosBrutas: number;
+  /** Pacote Personalizado: horas de cobertura e fotos editadas escolhidas pelo cliente. */
+  horasPersonalizado: number;
+  fotosPersonalizado: number;
+  /** Só de orçamentos antigos ("Edição de fotos" e retoque pesado saíram na tabela v4). */
   edicoes: number;
   retoques: number;
+  /** "padrao" = prazo padrão do pacote; senão, id de uma entrega expressa. */
   entregaId: string;
   deslocamentoId: string;
   diariasAuxiliar: number;
+  modoAuxiliar: ModoAuxiliarId;
 }
 
 export interface DadosCliente {
@@ -40,7 +47,7 @@ export interface DadosCliente {
 
 /**
  * fixo       → entra no total;
- * aPartirDe  → entra no total, mas o valor real pode ser maior (fotógrafo auxiliar);
+ * aPartirDe  → entra no total, mas o valor real pode ser maior (hoje sem uso; mantido para orçamentos antigos);
  * aCombinar  → não entra no total, é definido na conversa (deslocamento acima de 30 km).
  */
 export type TipoLinha = "fixo" | "aPartirDe" | "aCombinar";
@@ -74,18 +81,50 @@ export function selecaoVazia(categoria: CategoriaId = "ensaio"): Selecao {
     pacoteId: null,
     horasExtras: 0,
     fotosExtras: 0,
-    fotosBrutas: 0,
+    horasPersonalizado: 0,
+    fotosPersonalizado: 0,
     edicoes: 0,
     retoques: 0,
     entregaId: "padrao",
     deslocamentoId: "ate10",
     diariasAuxiliar: 1,
+    modoAuxiliar: "com",
   };
 }
 
-/** Preço unitário da foto extra: o de volume vale para TODAS quando a quantidade atinge o mínimo. */
-export function precoFotoExtra(qtd: number, cat: Catalogo): number {
-  return qtd >= cat.fotoExtra.volumeMin ? cat.fotoExtra.precoVolume : cat.fotoExtra.preco;
+/** Preço unitário da foto editada: o de volume vale para TODAS quando a quantidade atinge o mínimo. */
+export function precoFoto(qtd: number, categoria: Categoria): number {
+  const f = categoria.foto;
+  if (!f) return 0;
+  return qtd >= f.volumeMin ? f.precoVolume : f.preco;
+}
+
+/** O pacote escolhido é o Personalizado? */
+export function ehPersonalizado(sel: Selecao, cat: Catalogo): boolean {
+  return !!cat.pacotes.find((p) => p.id === sel.pacoteId)?.personalizado;
+}
+
+/** O deslocamento conta nesta seleção? (sessão de fotos, ou auxiliar sem transporte). */
+export function cobraDeslocamento(sel: Selecao, cat: Catalogo): boolean {
+  if (sel.categoria === "ensaio" || sel.categoria === "evento") return true;
+  if (sel.categoria !== "auxiliar") return false;
+  return !!cat.auxiliar.modos.find((m) => m.id === sel.modoAuxiliar)?.cobraDeslocamento;
+}
+
+/** Prazo de entrega escolhido: o padrão do pacote (ou do Personalizado, pelas fotos) ou uma expressa. */
+export function prazoEntrega(sel: Selecao, cat: Catalogo): { nome: string; detalhe: string; preco: number } | null {
+  const pacote = cat.pacotes.find((p) => p.id === sel.pacoteId);
+  if (!pacote) return null;
+  if (sel.entregaId === "padrao") {
+    const detalhe = pacote.personalizado ? prazoPorFotos(sel.fotosPersonalizado, cat) : pacote.prazo;
+    return { nome: "Prazo padrão", detalhe, preco: 0 };
+  }
+  const e = cat.entregas.find((x) => x.id === sel.entregaId);
+  return e ? { nome: e.nome, detalhe: e.detalhe, preco: e.preco } : null;
+}
+
+function textoDeslocamento(d: OpcaoDeslocamento): string {
+  return d.aCombinar ? "a combinar" : d.preco ? moeda(d.preco) : "sem custo";
 }
 
 export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
@@ -103,41 +142,47 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
   };
 
   if (categoria.temSessao) {
+    // Pacote fora do montador (legado ou desativado) ainda é aceito: o painel
+    // precisa ler orçamentos antigos. Quem esconde é o montador.
     const pacote = cat.pacotes.find((p) => p.id === sel.pacoteId && p.categoria === categoria.id);
     if (!pacote) {
       pendencias.push("Escolha um pacote.");
+    } else if (pacote.personalizado && categoria.personalizado) {
+      const regra = categoria.personalizado;
+      if (sel.horasPersonalizado < regra.horasMin) pendencias.push(`Personalizado: mínimo de ${regra.horasMin}h de cobertura.`);
+      if (sel.fotosPersonalizado < regra.fotosMin) pendencias.push(`Personalizado: mínimo de ${regra.fotosMin} fotos.`);
+      add("Personalizado: horas de cobertura", sel.horasPersonalizado, regra.valorHora);
+      add("Personalizado: fotos editadas", sel.fotosPersonalizado, precoFoto(sel.fotosPersonalizado, categoria));
     } else {
-      // Pacote fora do montador (legado ou desativado) ainda é aceito: o painel
-      // precisa ler orçamentos antigos. Quem esconde é o montador.
-      const lancamento = lancamentoVigente(pacote) ? " · preço de lançamento" : "";
-      add(`Pacote ${pacote.nome} (${pacote.duracao} · ${pacote.entrega}${lancamento})`, 1, precoDoPacote(pacote));
+      add(`Pacote ${pacote.nome} (${pacote.duracao} · ${pacote.entrega})`, 1, pacote.preco);
     }
     if (categoria.horaExtra) add("Hora extra em campo", sel.horasExtras, categoria.horaExtra);
-    add("Foto extra editada", sel.fotosExtras, precoFotoExtra(sel.fotosExtras, cat));
-    if (sel.fotosBrutas > 0 && sel.fotosBrutas < cat.fotoBruta.minimo) {
-      pendencias.push(`Fotos brutas: mínimo de ${cat.fotoBruta.minimo} unidades.`);
+    add("Foto extra editada", sel.fotosExtras, precoFoto(sel.fotosExtras, categoria));
+    add("Retoque pesado", sel.retoques, cat.legadoEdicao.retoquePesado);
+
+    if (sel.entregaId !== "padrao") {
+      const entrega = cat.entregas.find((e) => e.id === sel.entregaId);
+      if (!entrega) pendencias.push("Prazo de entrega inválido.");
+      else add(`Entrega ${entrega.nome.toLowerCase()} (${entrega.detalhe})`, 1, entrega.preco, "fixo", "entrega");
     }
-    add("Foto bruta sem edição", sel.fotosBrutas, cat.fotoBruta.preco);
-    add("Retoque pesado", sel.retoques, cat.retoquePesado);
+  }
 
-    const entrega = cat.entregas.find((e) => e.id === sel.entregaId);
-    if (!entrega) pendencias.push("Prazo de entrega inválido.");
-    else if (entrega.preco > 0) add(`Entrega ${entrega.nome.toLowerCase()} (${entrega.detalhe})`, 1, entrega.preco, "fixo", "entrega");
+  if (categoria.id === "auxiliar") {
+    const modo = cat.auxiliar.modos.find((m) => m.id === sel.modoAuxiliar) ?? cat.auxiliar.modos[0];
+    if (sel.diariasAuxiliar < 1) pendencias.push("Informe ao menos 1 diária.");
+    add(`Diária de fotógrafo auxiliar (${modo.nome.toLowerCase()})`, sel.diariasAuxiliar, modo.diaria);
+  }
 
+  if (cobraDeslocamento(sel, cat)) {
     const desl = cat.deslocamentos.find((d) => d.id === sel.deslocamentoId);
     if (!desl) pendencias.push("Deslocamento inválido.");
     else if (desl.aCombinar) add(`Deslocamento (${desl.nome})`, 1, 0, "aCombinar", "deslocamento");
     else if (desl.preco > 0) add(`Deslocamento (${desl.nome})`, 1, desl.preco, "fixo", "deslocamento");
   }
 
-  if (categoria.id === "auxiliar") {
-    if (sel.diariasAuxiliar < 1) pendencias.push("Informe ao menos 1 diária.");
-    add("Diária de fotógrafo auxiliar", sel.diariasAuxiliar, cat.auxiliar.aPartirDe, "aPartirDe");
-  }
-
   if (categoria.id === "edicao") {
-    add("Edição de foto do cliente", sel.edicoes, cat.edicaoCliente);
-    add("Retoque pesado", sel.retoques, cat.retoquePesado);
+    add("Edição de foto do cliente", sel.edicoes, cat.legadoEdicao.edicaoCliente);
+    add("Retoque pesado", sel.retoques, cat.legadoEdicao.retoquePesado);
     if (sel.edicoes + sel.retoques === 0) pendencias.push("Informe quantas fotos quer editar.");
   }
 
@@ -177,10 +222,12 @@ export interface Referencia {
 }
 
 // Chave curta de cada campo numérico da seleção na linha [ref].
+// "fb" (fotos brutas, até a v3) não é mais lida: o item saiu da tabela.
 const CHAVES_NUMERICAS: [keyof Selecao, string][] = [
   ["horasExtras", "he"],
   ["fotosExtras", "fe"],
-  ["fotosBrutas", "fb"],
+  ["horasPersonalizado", "hp"],
+  ["fotosPersonalizado", "fp"],
   ["edicoes", "ed"],
   ["retoques", "rt"],
   ["diariasAuxiliar", "ax"],
@@ -191,9 +238,10 @@ const CHAVES_NUMERICAS: [keyof Selecao, string][] = [
  * as abas (para o cliente poder ir e voltar sem perder nada), mas só as da
  * categoria escolhida podem ir para a mensagem e para o agendamento.
  *
- * Com o catálogo, aplica também as regras por serviço: fotos brutas só onde a
- * tabela permite (evento) e entrega só entre as opções do serviço (a Expressa
- * 24h é só de evento) — escolha que não vale volta ao padrão.
+ * Com o catálogo, aplica também as regras por pacote: no Personalizado não há
+ * hora extra nem foto extra (o cliente já escolhe horas e fotos); nos fechados,
+ * as quantidades do Personalizado somem; e a entrega expressa só vale no pacote
+ * que a oferece — escolha que não vale volta ao prazo padrão.
  */
 export function normalizarSelecao(sel: Selecao, cat?: Catalogo): Selecao {
   const s = { ...sel };
@@ -202,22 +250,35 @@ export function normalizarSelecao(sel: Selecao, cat?: Catalogo): Selecao {
     s.pacoteId = null;
     s.horasExtras = 0;
     s.fotosExtras = 0;
-    s.fotosBrutas = 0;
+    s.horasPersonalizado = 0;
+    s.fotosPersonalizado = 0;
     s.entregaId = "padrao";
-    s.deslocamentoId = "ate10";
   }
   if (s.categoria !== "edicao") s.edicoes = 0;
-  if (s.categoria !== "auxiliar") s.diariasAuxiliar = 0;
+  if (s.categoria !== "auxiliar") {
+    s.diariasAuxiliar = 0;
+    s.modoAuxiliar = "com";
+  }
   if (s.categoria === "auxiliar") s.retoques = 0;
-  if (cat && comSessao) {
-    if (!cat.fotoBruta.categorias.includes(s.categoria)) s.fotosBrutas = 0;
-    const entrega = cat.entregas.find((e) => e.id === s.entregaId);
-    if (entrega && !entregaValeNa(entrega, s.categoria)) s.entregaId = "padrao";
+  if (cat) {
+    if (!cobraDeslocamento(s, cat)) s.deslocamentoId = "ate10";
+    if (comSessao) {
+      if (ehPersonalizado(s, cat)) {
+        s.horasExtras = 0;
+        s.fotosExtras = 0;
+      } else {
+        s.horasPersonalizado = 0;
+        s.fotosPersonalizado = 0;
+      }
+      // Expressa de outro pacote volta ao padrão. As legadas (sem `pacotes`) passam: são de orçamentos antigos.
+      const entrega = cat.entregas.find((e) => e.id === s.entregaId);
+      if (entrega?.pacotes && !(s.pacoteId && entrega.pacotes.includes(s.pacoteId))) s.entregaId = "padrao";
+    }
   }
   return s;
 }
 
-/** Monta "[ref EJ-7K2M9 v1 em=2026-10-09 c=evento p=ev-curta he=1 …]". Campos zerados ficam de fora. */
+/** Monta "[ref EJ-7K2M9 v4 em=2026-10-09 c=evento p=ev-padrao3 he=1 …]". Campos zerados ficam de fora. */
 export function codificarReferencia(r: Referencia): string {
   const s = normalizarSelecao(r.selecao);
   const partes = [r.codigo, `v${r.versao}`, `em=${r.emitidoEm}`, `c=${s.categoria}`];
@@ -226,6 +287,7 @@ export function codificarReferencia(r: Referencia): string {
     const v = s[campo] as number;
     if (v > 0) partes.push(`${chave}=${v}`);
   }
+  if (s.categoria === "auxiliar" && s.modoAuxiliar !== "com") partes.push(`am=${s.modoAuxiliar}`);
   if (s.entregaId !== "padrao") partes.push(`en=${s.entregaId}`);
   if (s.deslocamentoId !== "ate10") partes.push(`ds=${s.deslocamentoId}`);
   if (r.data) partes.push(`dt=${r.data}`);
@@ -261,6 +323,8 @@ export function decodificarReferencia(texto: string): Referencia | null {
     const n = Number(mapa.get(chave) ?? 0);
     (selecao[campo] as number) = Number.isInteger(n) && n >= 0 && n <= 9999 ? n : 0;
   }
+  // Antes da v4 o auxiliar não tinha modo: sem "am", vale "com" (o padrão).
+  selecao.modoAuxiliar = mapa.get("am") === "sem" ? "sem" : "com";
   selecao.entregaId = mapa.get("en") ?? "padrao";
   selecao.deslocamentoId = mapa.get("ds") ?? "ate10";
 
@@ -322,15 +386,12 @@ export function gerarMensagem(m: Mensagem, cat: Catalogo): string {
     l.push(`• ${it.descricao}${qtd} — ${valor}`);
   }
 
-  // Deslocamento e entrega sempre aparecem (mesmo sem custo), para ficar claro o combinado.
-  const categoria = cat.categorias.find((x) => x.id === selecao.categoria);
-  if (categoria?.temSessao) {
-    const desl = cat.deslocamentos.find((d) => d.id === selecao.deslocamentoId);
-    const entrega = cat.entregas.find((e) => e.id === selecao.entregaId);
-    l.push("");
-    if (desl) l.push(`*Deslocamento:* ${desl.nome} — ${desl.aCombinar ? "a combinar" : desl.preco ? moeda(desl.preco) : "sem custo"}`);
-    if (entrega) l.push(`*Entrega:* ${entrega.nome} (${entrega.detalhe}) — ${entrega.preco ? moeda(entrega.preco) : "incluso"}`);
-  }
+  // Deslocamento e entrega sempre aparecem quando valem (mesmo sem custo), para ficar claro o combinado.
+  const desl = cobraDeslocamento(selecao, cat) ? cat.deslocamentos.find((d) => d.id === selecao.deslocamentoId) : undefined;
+  const entrega = prazoEntrega(selecao, cat);
+  if (desl || entrega) l.push("");
+  if (desl) l.push(`*Deslocamento:* ${desl.nome} — ${textoDeslocamento(desl)}`);
+  if (entrega) l.push(`*Entrega:* ${entrega.nome} (${entrega.detalhe}) — ${entrega.preco ? moeda(entrega.preco) : "incluso"}`);
 
   l.push("");
   const temCombinar = calc.linhas.some((x) => x.tipo === "aCombinar");
@@ -389,7 +450,8 @@ export function lerTextoColado(texto: string, cat: Catalogo): ResultadoLeitura {
   }
 
   const calc = calcular(ref.selecao, cat);
-  const pendenciasGraves = calc.pendencias.filter((p) => !p.startsWith("Fotos brutas"));
+  // Mínimo do Personalizado não impede criar: pode ter sido combinado na conversa (vira aviso).
+  const pendenciasGraves = calc.pendencias.filter((p) => !p.startsWith("Personalizado"));
   if (calc.linhas.length === 0 || pendenciasGraves.length > 0) {
     return { ok: false, erro: `O código do orçamento está incompleto: ${calc.pendencias.join(" ")}` };
   }
