@@ -30,12 +30,31 @@ export interface Categoria {
   temSessao: boolean;
   /** Valor da hora extra em campo nos pacotes fechados. */
   horaExtra?: number;
-  /** Foto extra (pacotes fechados) e foto do Personalizado. */
+  /**
+   * Foto extra dos pacotes fechados. Separada da foto do Personalizado de
+   * propósito: é acréscimo depois do pacote (muitas vezes definido só após a
+   * entrega) e não precisa competir com o preço do Personalizado.
+   */
   foto?: PrecoFoto;
-  /** Pacote Personalizado: valor da hora de cobertura e mínimos. */
-  personalizado?: { valorHora: number; horasMin: number; fotosMin: number };
+  /** Pacote Personalizado: tempo de cobertura em blocos de minutos + fotos editadas. */
+  personalizado?: Personalizado;
   /** Saiu do site; continua aqui só para o painel ler orçamentos antigos. */
   legado?: boolean;
+}
+
+/**
+ * Regras do Personalizado. Calibradas (v5) para sair perto dos pacotes fechados
+ * com o mesmo conteúdo — o Personalizado ganha quando o cliente quer menos
+ * tempo ou menos fotos que um pacote.
+ */
+export interface Personalizado {
+  valorHora: number;
+  /** Tempo cobrado em blocos deste tamanho (o contador anda de bloco em bloco). */
+  blocoMinutos: number;
+  minutosMin: number;
+  minutosMax: number;
+  fotosMin: number;
+  foto: PrecoFoto;
 }
 
 export interface Pacote {
@@ -53,8 +72,8 @@ export interface Pacote {
   /** Aviso curto mostrado no cartão do pacote. */
   aviso?: string;
   /**
-   * Pacote montado pelo cliente: preço = horas × valor da hora + fotos × preço
-   * da foto (ver `Categoria.personalizado` e `Categoria.foto`). `preco` e
+   * Pacote montado pelo cliente: preço = tempo × valor da hora + fotos × preço
+   * da foto (ver `Categoria.personalizado`). `preco` e
    * `prazo` não valem; o prazo sai de `prazoPorFotos()`.
    */
   personalizado?: boolean;
@@ -124,12 +143,15 @@ const MARCA = { nome: "Eluan Jesus", complemento: "Fotografia" };
 const INSTAGRAM = "@eluan.jesus";
 
 export const CATALOGO: Catalogo = {
+  // v5 (08/11/2026): Personalizado mais em conta — tempo em blocos (ensaio de
+  // 15 min, mínimo 15 min; evento de 30 min, mínimo 1h) e foto a R$6, todas a
+  // R$4,50 a partir de 30 (ensaio) ou 60 (evento). Foto extra dos pacotes segue R$12/R$10.
   // v4 (08/11/2026): prazo de entrega por pacote, Personalizado (horas + fotos),
   // ensaio hora extra R$35, evento Padrão R$250 / Completo R$360 / hora extra
   // R$45, foto extra R$12 (R$10 a partir de 15 no ensaio e 50 no evento), auxiliar
   // R$90/R$120, sem lançamento, sem fotos brutas, sem retoque e sem "Edição de fotos".
   // v3: eventos novos, Sessão Rápida, sinal 40%, deslocamento em faixas.
-  versao: 4,
+  versao: 5,
   marca: MARCA,
   contato: {
     nome: `${MARCA.nome} ${MARCA.complemento}`,
@@ -146,7 +168,14 @@ export const CATALOGO: Catalogo = {
       temSessao: true,
       horaExtra: 35,
       foto: { preco: 12, precoVolume: 10, volumeMin: 15 },
-      personalizado: { valorHora: 30, horasMin: 1, fotosMin: 5 },
+      personalizado: {
+        valorHora: 30,
+        blocoMinutos: 15,
+        minutosMin: 15,
+        minutosMax: 480,
+        fotosMin: 5,
+        foto: { preco: 6, precoVolume: 4.5, volumeMin: 30 },
+      },
     },
     {
       id: "evento",
@@ -155,7 +184,14 @@ export const CATALOGO: Catalogo = {
       temSessao: true,
       horaExtra: 45,
       foto: { preco: 12, precoVolume: 10, volumeMin: 50 },
-      personalizado: { valorHora: 45, horasMin: 1, fotosMin: 20 },
+      personalizado: {
+        valorHora: 45,
+        blocoMinutos: 30,
+        minutosMin: 60,
+        minutosMax: 720,
+        fotosMin: 20,
+        foto: { preco: 6, precoVolume: 4.5, volumeMin: 60 },
+      },
     },
     {
       id: "auxiliar",
@@ -208,7 +244,7 @@ export const CATALOGO: Catalogo = {
       id: "en-personalizado",
       categoria: "ensaio",
       nome: "Personalizado",
-      duracao: "Você escolhe as horas",
+      duracao: "Você escolhe o tempo de cobertura",
       entrega: "Você escolhe quantas fotos",
       preco: 0,
       prazo: "",
@@ -239,7 +275,7 @@ export const CATALOGO: Catalogo = {
       id: "ev-personalizado",
       categoria: "evento",
       nome: "Personalizado",
-      duracao: "Você escolhe as horas",
+      duracao: "Você escolhe o tempo de cobertura",
       entrega: "Você escolhe quantas fotos",
       preco: 0,
       prazo: "",

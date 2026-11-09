@@ -14,14 +14,14 @@ import { Camera, Check, PartyPopper, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CATALOGO, entregaValeNo, pacoteDisponivel, type Catalogo, type CategoriaId, type Pacote } from "@/lib/catalogo";
 import { cn } from "@/lib/cn";
-import { hojeIso, moeda } from "@/lib/formato";
+import { duracaoTexto, hojeIso, moeda } from "@/lib/formato";
 import { calcular, precoFoto, prazoEntrega, selecaoVazia, type DadosCliente, type Selecao } from "@/lib/orcamento";
 import { Campo, CampoTexto } from "@/components/ui/Campo";
 import { Contador } from "@/components/ui/Contador";
 import Resumo from "./Resumo";
 
-// v3 desde a tabela v4: rascunhos antigos tinham fotos brutas, retoque e "Edição de fotos".
-const CHAVE_RASCUNHO = "ej-rascunho-v3";
+// v4 desde a tabela v5: o Personalizado passou de horas para minutos.
+const CHAVE_RASCUNHO = "ej-rascunho-v4";
 
 const ICONES: Partial<Record<CategoriaId, ReactNode>> = {
   ensaio: <Camera className="size-5" />,
@@ -113,7 +113,14 @@ export default function Montador() {
       // Personalizado começa no mínimo de horas e fotos, para o total já sair válido.
       const comMinimos =
         p.personalizado && regra
-          ? { horasPersonalizado: Math.max(regra.horasMin, s.horasPersonalizado), fotosPersonalizado: Math.max(regra.fotosMin, s.fotosPersonalizado) }
+          ? {
+              // Tempo vindo da outra aba (ensaio anda de 15 em 15, evento de 30 em 30) só fica se couber nos blocos.
+              minutosPersonalizado:
+                s.minutosPersonalizado % regra.blocoMinutos === 0 && s.minutosPersonalizado <= regra.minutosMax
+                  ? Math.max(regra.minutosMin, s.minutosPersonalizado)
+                  : regra.minutosMin,
+              fotosPersonalizado: Math.max(regra.fotosMin, s.fotosPersonalizado),
+            }
           : {};
       return ajustarAoServico({ ...s, pacoteId: p.id, ...comMinimos }, cat);
     });
@@ -155,7 +162,7 @@ export default function Montador() {
                     <p className="text-sm text-suave">{p.personalizado ? p.entrega : `${p.entrega} editadas`}</p>
                     <p className="mt-2 text-xs text-fraco">
                       {p.personalizado
-                        ? `${moeda(categoria.personalizado?.valorHora ?? 0)} por hora · ${moeda(categoria.foto?.preco ?? 0)} por foto`
+                        ? `${moeda(categoria.personalizado?.valorHora ?? 0)} por hora · ${moeda(categoria.personalizado?.foto.preco ?? 0)} por foto`
                         : `Entrega ${p.prazo}`}
                     </p>
                     {p.aviso && <p className="mt-2 text-xs text-suave">{p.aviso}</p>}
@@ -198,29 +205,30 @@ export default function Montador() {
             <Passo
               numero={passo++}
               titulo={personalizado ? "Monte o seu pacote" : "Ajuste do seu jeito"}
-              subtitulo={personalizado ? "Escolha as horas de cobertura e quantas fotos editadas quer." : "Opcional. Deixe em zero o que não precisar."}
+              subtitulo={personalizado ? "Escolha o tempo de cobertura e quantas fotos editadas quer." : "Opcional. Deixe em zero o que não precisar."}
             >
               <div className="divide-y divide-borda rounded-xl border border-borda bg-superficie">
-                {personalizado && categoria.personalizado && categoria.foto ? (
+                {personalizado && categoria.personalizado ? (
                   <>
                     <Linha
-                      titulo="Horas de cobertura"
+                      titulo="Tempo de cobertura"
                       preco={`${moeda(categoria.personalizado.valorHora)} / hora`}
-                      descricao={`Mínimo de ${categoria.personalizado.horasMin}h`}
+                      descricao={`Blocos de ${categoria.personalizado.blocoMinutos} min · mínimo de ${duracaoTexto(categoria.personalizado.minutosMin)}`}
                     >
                       <Contador
-                        rotulo="horas de cobertura"
-                        valor={selecao.horasPersonalizado}
-                        aoMudar={(n) => mudar("horasPersonalizado", n)}
-                        minimo={categoria.personalizado.horasMin}
-                        maximo={12}
-                        unidade="h"
+                        rotulo="tempo de cobertura"
+                        valor={selecao.minutosPersonalizado}
+                        aoMudar={(n) => mudar("minutosPersonalizado", n)}
+                        minimo={categoria.personalizado.minutosMin}
+                        maximo={categoria.personalizado.minutosMax}
+                        passo={categoria.personalizado.blocoMinutos}
+                        formatar={duracaoTexto}
                       />
                     </Linha>
                     <Linha
                       titulo="Fotos editadas"
-                      preco={`${moeda(precoFoto(selecao.fotosPersonalizado, categoria))} / foto`}
-                      descricao={`Mínimo de ${categoria.personalizado.fotosMin} · ${moeda(categoria.foto.precoVolume)} cada a partir de ${categoria.foto.volumeMin}`}
+                      preco={`${moeda(precoFoto(selecao.fotosPersonalizado, categoria.personalizado.foto))} / foto`}
+                      descricao={`Mínimo de ${categoria.personalizado.fotosMin} · ${moeda(categoria.personalizado.foto.precoVolume)} cada a partir de ${categoria.personalizado.foto.volumeMin}`}
                     >
                       <Contador
                         rotulo="fotos editadas"
@@ -239,7 +247,7 @@ export default function Montador() {
                     {categoria.foto && (
                       <Linha
                         titulo="Fotos extras editadas"
-                        preco={`${moeda(precoFoto(selecao.fotosExtras, categoria))} / foto`}
+                        preco={`${moeda(precoFoto(selecao.fotosExtras, categoria.foto))} / foto`}
                         descricao={`${moeda(categoria.foto.precoVolume)} cada a partir de ${categoria.foto.volumeMin}`}
                       >
                         <Contador rotulo="fotos extras" valor={selecao.fotosExtras} aoMudar={(n) => mudar("fotosExtras", n)} maximo={300} />

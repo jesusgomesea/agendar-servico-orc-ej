@@ -15,9 +15,11 @@ interface Props {
   passo?: number;
   minimoQuandoAtivo?: number;
   unidade?: string;
+  /** Texto do valor no lugar do número (ex.: 90 → "1h30"). */
+  formatar?: (n: number) => string;
 }
 
-export function Contador({ rotulo, valor, aoMudar, minimo = 0, maximo = 999, passo = 1, minimoQuandoAtivo, unidade }: Props) {
+export function Contador({ rotulo, valor, aoMudar, minimo = 0, maximo = 999, passo = 1, minimoQuandoAtivo, unidade, formatar }: Props) {
   const menos = () => {
     if (minimoQuandoAtivo && valor <= minimoQuandoAtivo) return aoMudar(minimo);
     aoMudar(Math.max(minimo, valor - passo));
@@ -34,8 +36,8 @@ export function Contador({ rotulo, valor, aoMudar, minimo = 0, maximo = 999, pas
         <Minus className="size-4" />
       </button>
       <output className={cn("tabular min-w-12 text-center text-sm font-semibold", valor === 0 && "text-fraco")} aria-live="polite">
-        {valor}
-        {unidade && valor > 0 ? <span className="ml-0.5 font-normal text-suave">{unidade}</span> : null}
+        {formatar ? formatar(valor) : valor}
+        {!formatar && unidade && valor > 0 ? <span className="ml-0.5 font-normal text-suave">{unidade}</span> : null}
       </output>
       <button type="button" className={botao} onClick={mais} disabled={valor >= maximo} aria-label={`Aumentar ${rotulo}`}>
         <Plus className="size-4" />

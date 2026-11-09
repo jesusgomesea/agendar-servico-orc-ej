@@ -18,10 +18,10 @@ por [lib/orcamento.test.ts](../lib/orcamento.test.ts).
 | Preços, pacotes, prazos, extras, deslocamento, auxiliar, sinal | `CATALOGO` em [lib/catalogo.ts](../lib/catalogo.ts) |
 | Nome de apresentação (cabeçalho, título, mensagem, login) | `MARCA` em `catalogo.ts` → `CATALOGO.marca` / `contato.nome` |
 | Hora extra: ensaio R$35 / evento R$45 (só nos pacotes fechados) | `Categoria.horaExtra` |
-| Foto editada (extra e Personalizado): R$12; **todas** a R$10 a partir de 15 (ensaio) ou 50 (evento) | `Categoria.foto` + `precoFoto()` |
+| Foto extra dos pacotes fechados: R$12; **todas** a R$10 a partir de 15 (ensaio) ou 50 (evento). Separada da foto do Personalizado | `Categoria.foto` + `precoFoto()` |
 | Prazo de entrega: cada pacote tem o seu (`prazo`, id `"padrao"`, sem custo) | `Pacote.prazo` + `prazoEntrega()` |
 | Expressas só no pacote que oferece (ensaio Completo 36h +40 / 24h +50; evento Padrão 24h +60; evento Completo 1–3 dias +80) | `OpcaoEntrega.pacotes` + `entregaValeNo()`; `normalizarSelecao()` volta ao padrão |
-| Personalizado: horas × valor da hora (ensaio R$30, evento R$45) + fotos; mínimo 1h e 5 fotos (ensaio) / 20 (evento); sem hora extra nem foto extra | `Pacote.personalizado` + `Categoria.personalizado`; `calcular()` |
+| Personalizado: tempo × valor da hora (ensaio R$30 em blocos de 15 min, mínimo 15 min; evento R$45 em blocos de 30 min, mínimo 1h) + fotos a R$6, **todas** a R$4,50 a partir de 30 (ensaio) ou 60 (evento); mínimo 5 fotos (ensaio) / 20 (evento); sem hora extra nem foto extra | `Categoria.personalizado` + `valorCobertura()` / `precoFoto()`; `calcular()` |
 | Prazo do Personalizado pelas fotos: até 10 → 24h · até 30 → 36–48h · até 50 → 3 dias · mais → 3–5 dias com parciais | `prazosPersonalizado` + `prazoPorFotos()` |
 | Sessão Rápida: aparece só com `ativo: true` (datas especiais de agenda coletiva) | `Pacote.ativo` + `pacoteDisponivel()` |
 | Deslocamento: até 10 km grátis · 10–20 km +R$25 · 20–30 km +R$45 · acima de 30 km a combinar (fora do total) | `deslocamentos`; `aCombinar` → linha `tipo: "aCombinar"` |
@@ -45,7 +45,8 @@ O cliente pode editar a mensagem no WhatsApp antes de enviar. Por isso a mensage
 | `v1` | versão do catálogo usada pelo cliente |
 | `em` | data em que o orçamento foi emitido |
 | `c` / `p` | categoria / pacote |
-| `he fe hp fp ax` | horas extras, fotos extras, horas e fotos do Personalizado, diárias de auxiliar |
+| `he fe mp fp ax` | horas extras, fotos extras, minutos e fotos do Personalizado, diárias de auxiliar |
+| `hp` | horas inteiras do Personalizado, só em orçamentos da v4 (lido como `hp × 60` minutos) |
 | `am=sem` | auxiliar sem alimentação e transporte (ausente = com) |
 | `ed rt fb` | só em orçamentos antigos (edição, retoque, fotos brutas); `fb` é ignorado |
 | `en` / `ds` | entrega / deslocamento (omitidos quando são o padrão) |

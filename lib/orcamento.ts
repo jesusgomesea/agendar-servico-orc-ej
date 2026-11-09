@@ -10,8 +10,8 @@
 // O painel lê essa linha, refaz a conta com o catálogo e avisa se o total escrito
 // não bate. As linhas legíveis (Cliente, Local…) servem só para os dados pessoais.
 
-import { prazoPorFotos, type Catalogo, type Categoria, type CategoriaId, type OpcaoDeslocamento } from "./catalogo";
-import { dataBR, dataBRparaIso, dataIsoValida, lerMoeda, moeda, somarDias } from "./formato";
+import { prazoPorFotos, type Catalogo, type CategoriaId, type OpcaoDeslocamento, type PrecoFoto } from "./catalogo";
+import { dataBR, dataBRparaIso, dataIsoValida, duracaoTexto, lerMoeda, moeda, somarDias } from "./formato";
 
 export type ModoAuxiliarId = "com" | "sem";
 
@@ -21,8 +21,8 @@ export interface Selecao {
   pacoteId: string | null;
   horasExtras: number;
   fotosExtras: number;
-  /** Pacote Personalizado: horas de cobertura e fotos editadas escolhidas pelo cliente. */
-  horasPersonalizado: number;
+  /** Pacote Personalizado: minutos de cobertura e fotos editadas escolhidas pelo cliente. */
+  minutosPersonalizado: number;
   fotosPersonalizado: number;
   /** Só de orçamentos antigos ("Edição de fotos" e retoque pesado saíram na tabela v4). */
   edicoes: number;
@@ -81,7 +81,7 @@ export function selecaoVazia(categoria: CategoriaId = "ensaio"): Selecao {
     pacoteId: null,
     horasExtras: 0,
     fotosExtras: 0,
-    horasPersonalizado: 0,
+    minutosPersonalizado: 0,
     fotosPersonalizado: 0,
     edicoes: 0,
     retoques: 0,
@@ -93,10 +93,14 @@ export function selecaoVazia(categoria: CategoriaId = "ensaio"): Selecao {
 }
 
 /** Preço unitário da foto editada: o de volume vale para TODAS quando a quantidade atinge o mínimo. */
-export function precoFoto(qtd: number, categoria: Categoria): number {
-  const f = categoria.foto;
-  if (!f) return 0;
-  return qtd >= f.volumeMin ? f.precoVolume : f.preco;
+export function precoFoto(qtd: number, tabela: PrecoFoto | undefined): number {
+  if (!tabela) return 0;
+  return qtd >= tabela.volumeMin ? tabela.precoVolume : tabela.preco;
+}
+
+/** Valor do tempo de cobertura do Personalizado (proporcional ao valor da hora). */
+export function valorCobertura(minutos: number, valorHora: number): number {
+  return Math.round((minutos * valorHora * 100) / 60) / 100;
 }
 
 /** O pacote escolhido é o Personalizado? */
@@ -149,15 +153,20 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
       pendencias.push("Escolha um pacote.");
     } else if (pacote.personalizado && categoria.personalizado) {
       const regra = categoria.personalizado;
-      if (sel.horasPersonalizado < regra.horasMin) pendencias.push(`Personalizado: mínimo de ${regra.horasMin}h de cobertura.`);
+      if (sel.minutosPersonalizado < regra.minutosMin) {
+        pendencias.push(`Personalizado: mínimo de ${duracaoTexto(regra.minutosMin)} de cobertura.`);
+      }
       if (sel.fotosPersonalizado < regra.fotosMin) pendencias.push(`Personalizado: mínimo de ${regra.fotosMin} fotos.`);
-      add("Personalizado: horas de cobertura", sel.horasPersonalizado, regra.valorHora);
-      add("Personalizado: fotos editadas", sel.fotosPersonalizado, precoFoto(sel.fotosPersonalizado, categoria));
+      // Tempo vai numa linha só (quantidade 1): "× 1,5 h" confundiria mais que ajudaria.
+      if (sel.minutosPersonalizado > 0) {
+        add(`Personalizado: cobertura de ${duracaoTexto(sel.minutosPersonalizado)}`, 1, valorCobertura(sel.minutosPersonalizado, regra.valorHora));
+      }
+      add("Personalizado: fotos editadas", sel.fotosPersonalizado, precoFoto(sel.fotosPersonalizado, regra.foto));
     } else {
       add(`Pacote ${pacote.nome} (${pacote.duracao} · ${pacote.entrega})`, 1, pacote.preco);
     }
     if (categoria.horaExtra) add("Hora extra em campo", sel.horasExtras, categoria.horaExtra);
-    add("Foto extra editada", sel.fotosExtras, precoFoto(sel.fotosExtras, categoria));
+    add("Foto extra editada", sel.fotosExtras, precoFoto(sel.fotosExtras, categoria.foto));
     add("Retoque pesado", sel.retoques, cat.legadoEdicao.retoquePesado);
 
     if (sel.entregaId !== "padrao") {
@@ -226,7 +235,7 @@ export interface Referencia {
 const CHAVES_NUMERICAS: [keyof Selecao, string][] = [
   ["horasExtras", "he"],
   ["fotosExtras", "fe"],
-  ["horasPersonalizado", "hp"],
+  ["minutosPersonalizado", "mp"],
   ["fotosPersonalizado", "fp"],
   ["edicoes", "ed"],
   ["retoques", "rt"],
@@ -250,7 +259,7 @@ export function normalizarSelecao(sel: Selecao, cat?: Catalogo): Selecao {
     s.pacoteId = null;
     s.horasExtras = 0;
     s.fotosExtras = 0;
-    s.horasPersonalizado = 0;
+    s.minutosPersonalizado = 0;
     s.fotosPersonalizado = 0;
     s.entregaId = "padrao";
   }
@@ -267,7 +276,7 @@ export function normalizarSelecao(sel: Selecao, cat?: Catalogo): Selecao {
         s.horasExtras = 0;
         s.fotosExtras = 0;
       } else {
-        s.horasPersonalizado = 0;
+        s.minutosPersonalizado = 0;
         s.fotosPersonalizado = 0;
       }
       // Expressa de outro pacote volta ao padrão. As legadas (sem `pacotes`) passam: são de orçamentos antigos.
@@ -323,6 +332,9 @@ export function decodificarReferencia(texto: string): Referencia | null {
     const n = Number(mapa.get(chave) ?? 0);
     (selecao[campo] as number) = Number.isInteger(n) && n >= 0 && n <= 9999 ? n : 0;
   }
+  // Na v4 o Personalizado contava horas inteiras ("hp"); a partir da v5, minutos ("mp").
+  const horasV4 = Number(mapa.get("hp") ?? 0);
+  if (!mapa.has("mp") && Number.isInteger(horasV4) && horasV4 > 0 && horasV4 <= 24) selecao.minutosPersonalizado = horasV4 * 60;
   // Antes da v4 o auxiliar não tinha modo: sem "am", vale "com" (o padrão).
   selecao.modoAuxiliar = mapa.get("am") === "sem" ? "sem" : "com";
   selecao.entregaId = mapa.get("en") ?? "padrao";

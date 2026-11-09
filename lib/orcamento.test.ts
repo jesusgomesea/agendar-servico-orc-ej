@@ -111,31 +111,55 @@ describe("prazo de entrega por pacote", () => {
     expect(prazoPorFotos(31, CATALOGO)).toBe("3 dias");
     expect(prazoPorFotos(50, CATALOGO)).toBe("3 dias");
     expect(prazoPorFotos(51, CATALOGO)).toBe("3–5 dias, com entregas parciais");
-    expect(prazo(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 2, fotosPersonalizado: 20 }))).toBe("36–48 horas");
+    expect(prazo(evento({ pacoteId: "ev-personalizado", minutosPersonalizado: 120, fotosPersonalizado: 20 }))).toBe("36–48 horas");
   });
 });
 
 describe("Personalizado", () => {
-  it("ensaio: horas × R$30 + fotos × R$12 (todas a R$10 a partir de 15)", () => {
-    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 2, fotosPersonalizado: 10 }))).toBe(60 + 120);
-    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 2, fotosPersonalizado: 15 }))).toBe(60 + 150);
+  const pe = (min: number, fotos: number, extra: Partial<Selecao> = {}) =>
+    ensaio({ pacoteId: "en-personalizado", minutosPersonalizado: min, fotosPersonalizado: fotos, ...extra });
+  const pv = (min: number, fotos: number) => evento({ pacoteId: "ev-personalizado", minutosPersonalizado: min, fotosPersonalizado: fotos });
+
+  it("ensaio: tempo a R$30/hora (blocos de 15 min) + fotos a R$6, todas a R$4,50 a partir de 30", () => {
+    expect(total(pe(15, 5))).toBe(7.5 + 30);
+    expect(total(pe(60, 10))).toBe(30 + 60);
+    expect(total(pe(60, 29))).toBe(30 + 29 * 6);
+    expect(total(pe(60, 30))).toBe(30 + 30 * 4.5);
   });
 
-  it("evento: horas × R$45 + fotos × R$12 (todas a R$10 a partir de 50)", () => {
-    expect(total(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 49 }))).toBe(135 + 588);
-    expect(total(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 50 }))).toBe(135 + 500);
+  it("evento: tempo a R$45/hora + fotos a R$6, todas a R$4,50 a partir de 60", () => {
+    expect(total(pv(60, 20))).toBe(45 + 120);
+    expect(total(pv(90, 59))).toBe(67.5 + 59 * 6);
+    expect(total(pv(210, 90))).toBe(157.5 + 90 * 4.5);
   });
 
-  it("mínimos: 1h; 5 fotos no ensaio e 20 no evento", () => {
-    expect(calcular(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 4 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 5 fotos/);
-    expect(calcular(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 1, fotosPersonalizado: 19 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 20 fotos/);
-    expect(calcular(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 0, fotosPersonalizado: 20 }), CATALOGO).pendencias.join()).toMatch(/mínimo de 1h/);
-    expect(calcular(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 5 }), CATALOGO).pendencias).toEqual([]);
+  it("sai perto dos pacotes de ensaio com o mesmo conteúdo", () => {
+    expect(total(pe(60, 35))).toBeLessThan(200); // Padrão: 1h, 30–40 fotos
+    expect(total(pe(105, 60))).toBeLessThan(330); // Completo: 1h45, 50–70 fotos
   });
 
-  it("não tem hora extra nem foto extra; pacote fechado ignora horas/fotos do Personalizado", () => {
-    expect(total(ensaio({ pacoteId: "en-personalizado", horasPersonalizado: 1, fotosPersonalizado: 5, horasExtras: 3, fotosExtras: 10 }))).toBe(30 + 60);
-    expect(total(ensaio({ pacoteId: "en-mini", horasPersonalizado: 5, fotosPersonalizado: 50 }))).toBe(100);
+  it("mínimos: ensaio 15 min e 5 fotos; evento 1h e 20 fotos", () => {
+    expect(calcular(pe(15, 4), CATALOGO).pendencias.join()).toMatch(/mínimo de 5 fotos/);
+    expect(calcular(pe(0, 5), CATALOGO).pendencias.join()).toMatch(/mínimo de 15 min/);
+    expect(calcular(pv(30, 20), CATALOGO).pendencias.join()).toMatch(/mínimo de 1h de cobertura/);
+    expect(calcular(pv(60, 19), CATALOGO).pendencias.join()).toMatch(/mínimo de 20 fotos/);
+    expect(calcular(pe(15, 5), CATALOGO).pendencias).toEqual([]);
+    expect(calcular(pv(60, 20), CATALOGO).pendencias).toEqual([]);
+  });
+
+  it("não tem hora extra nem foto extra; pacote fechado ignora tempo/fotos do Personalizado", () => {
+    expect(total(pe(15, 5, { horasExtras: 3, fotosExtras: 10 }))).toBe(37.5);
+    expect(total(ensaio({ pacoteId: "en-mini", minutosPersonalizado: 300, fotosPersonalizado: 50 }))).toBe(100);
+  });
+
+  it("foto extra dos pacotes continua separada (R$12, R$10 a partir de 15/50)", () => {
+    expect(total(ensaio({ pacoteId: "en-mini", fotosExtras: 1 }))).toBe(112);
+  });
+
+  it("lê orçamentos da v4, que contavam horas inteiras (hp)", () => {
+    const ref = decodificarReferencia("[ref EJ-7K2M9 v4 em=2026-11-08 c=evento p=ev-personalizado hp=2 fp=20]");
+    expect(ref?.selecao.minutosPersonalizado).toBe(120);
+    expect(ref && total(ref.selecao)).toBe(90 + 120);
   });
 });
 
@@ -205,7 +229,7 @@ describe("referência [ref]", () => {
   });
 
   it("vai e volta com Personalizado e com auxiliar sem transporte", () => {
-    const pers = evento({ pacoteId: "ev-personalizado", horasPersonalizado: 3, fotosPersonalizado: 40 });
+    const pers = evento({ pacoteId: "ev-personalizado", minutosPersonalizado: 210, fotosPersonalizado: 40 });
     expect(ida(pers)?.selecao).toEqual({ ...pers, diariasAuxiliar: 0 });
     const aux = { ...selecaoVazia("auxiliar"), diariasAuxiliar: 2, modoAuxiliar: "sem" as const, deslocamentoId: "10a20" };
     expect(ida(aux)?.selecao).toEqual(aux);
@@ -244,12 +268,13 @@ describe("mensagem do WhatsApp → painel", () => {
     expect(texto).toContain("*Observações:* Aniversário de 1 ano com tema safari");
   });
 
-  it("Personalizado: itens de horas e fotos e o prazo pela quantidade de fotos", () => {
-    const t = msg(evento({ pacoteId: "ev-personalizado", horasPersonalizado: 2, fotosPersonalizado: 20 }));
-    expect(t).toContain("• Personalizado: horas de cobertura × 2 — R$ 90,00");
-    expect(t).toContain("• Personalizado: fotos editadas × 20 — R$ 240,00");
+  it("Personalizado: itens de tempo e fotos e o prazo pela quantidade de fotos", () => {
+    const t = msg(evento({ pacoteId: "ev-personalizado", minutosPersonalizado: 90, fotosPersonalizado: 20 }));
+    expect(t).toContain("• Personalizado: cobertura de 1h30 — R$ 67,50");
+    expect(t).toContain("• Personalizado: fotos editadas × 20 — R$ 120,00");
     expect(t).toContain("*Entrega:* Prazo padrão (36–48 horas) — incluso");
-    expect(t).toContain("*Total:* R$ 330,00");
+    expect(t).toContain("*Total:* R$ 187,50");
+    expect(t).toContain("*Sinal (40%):* R$ 75,00");
   });
 
   it("auxiliar com transporte incluso: sem linhas de entrega e deslocamento", () => {

@@ -91,3 +91,11 @@ export function linkWhatsApp(telefone: string, texto?: string): string | null {
   if (n.length < 12) return null;
   return `https://wa.me/${n}${texto ? `?text=${encodeURIComponent(texto)}` : ""}`;
 }
+
+/** Duração em minutos para leitura: 15 → "15 min", 60 → "1h", 90 → "1h30". */
+export function duracaoTexto(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h === 0) return `${m} min`;
+  return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+}
