@@ -116,6 +116,22 @@ blocos condicionais do montador.
   o que já foi combinado. `valorCombinado` substitui o orçado quando você fecha outro valor (ex.: com o
   deslocamento). Extras de pós-venda somam por cima.
 
+## 5b. API pública para o Orça Aqui
+
+O painel está migrando para o Orça Aqui (ver `PLANO-INTEGRACAO-ORCAAQUI.md`, na pasta acima do repositório).
+Para a tabela de preços continuar num lugar só, este site expõe duas rotas **sem login e sem dados
+pessoais**, com `Access-Control-Allow-Origin: *`:
+
+| Rota | O que devolve |
+|---|---|
+| `GET /api/recalcular?ref=[ref EJ-… …]` | `{ ok, recalculo: { versaoApi, versaoTabela, versaoRef, codigo, emitidoEm, data, horario, selecao, servico, linhas, total, totalEhMinimo, sinalPercentual, sinal, restante, prazo, pendencias, avisos } }`, ou `{ ok: false, erro }` com status 400 |
+| `GET /api/catalogo` | O `CATALOGO` em JSON + `versaoApi` (estático, muda a cada deploy). A última faixa de `prazosPersonalizado` tem `ateFotos: null` ("sem limite") |
+
+- Recebe **só a linha `[ref]`**: nome, telefone e local ficam no Orça Aqui.
+- A lógica fica em [lib/recalculo.ts](../lib/recalculo.ts), coberta por `lib/recalculo.test.ts`.
+- **Isto é um contrato com outro sistema:** mudou um campo, mantenha o antigo ou suba `VERSAO_API`.
+- A tabela antiga não bloqueia: vira aviso, como no painel.
+
 ## 6. Modo local (testar sem Netlify)
 
 [lib/modoLocal.ts](../lib/modoLocal.ts): com `next dev` **e** `NEXT_PUBLIC_PAINEL_LOCAL=1`
