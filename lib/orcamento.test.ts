@@ -185,7 +185,7 @@ describe("tabela antiga e o que saiu do site", () => {
     expect(CATALOGO.categorias.find((c) => c.id === "edicao")?.legado).toBe(true);
   });
 
-  it("o painel ainda lê orçamentos antigos (pacotes, entrega e deslocamento da v2/v3, edição de fotos)", () => {
+  it("ainda lê orçamentos antigos (pacotes, entrega e deslocamento da v2/v3, edição de fotos)", () => {
     expect(total(evento({ pacoteId: "ev-curta" }))).toBe(350);
     expect(total(evento({ pacoteId: "ev-padrao3", entregaId: "4d" }))).toBe(250 + 90);
     expect(calcular(evento({ pacoteId: "ev-curta", deslocamentoId: "acima10" }), CATALOGO).totalEhMinimo).toBe(true);
@@ -246,7 +246,7 @@ describe("referência [ref]", () => {
   });
 });
 
-describe("mensagem do WhatsApp → painel", () => {
+describe("mensagem do WhatsApp → leitura de volta", () => {
   const msg = (selecao: Selecao) => gerarMensagem({ codigo: "EJ-7K2M9", emitidoEm: "2026-10-09", selecao, cliente }, CATALOGO);
   const texto = msg(evento({ pacoteId: "ev-padrao3", horasExtras: 1, entregaId: "ev24" }));
 
@@ -284,7 +284,7 @@ describe("mensagem do WhatsApp → painel", () => {
     expect(t).toContain("*Total:* R$ 90,00");
   });
 
-  it("o painel lê de volta os dados do cliente e o valor, sem avisos", () => {
+  it("lê de volta os dados do cliente e o valor, sem avisos", () => {
     const r = lerTextoColado(texto, CATALOGO);
     if (!r.ok) throw new Error(r.erro);
     expect(r.leitura.cliente.nome).toBe("Maria Souza");

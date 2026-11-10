@@ -2,12 +2,12 @@
 //
 // É o arquivo mais importante do projeto. O mesmo código roda nos dois lados:
 //  - no montador público, para mostrar o valor e montar a mensagem;
-//  - no painel, para ler a mensagem colada e RECALCULAR o valor pela tabela.
+//  - na API de recálculo (lib/recalculo.ts, usada pelo Orça Aqui), para RECALCULAR o valor pela tabela.
 //
-// Por que recalcular no painel em vez de confiar no total escrito? O cliente pode
+// Por que recalcular em vez de confiar no total escrito? O cliente pode
 // editar a mensagem no WhatsApp antes de enviar. Por isso a mensagem leva uma
 // linha "[ref …]" com a escolha do cliente codificada (pacote, quantidades, data).
-// O painel lê essa linha, refaz a conta com o catálogo e avisa se o total escrito
+// O recálculo lê essa linha, refaz a conta com o catálogo e avisa se o total escrito
 // não bate. As linhas legíveis (Cliente, Local…) servem só para os dados pessoais.
 
 import { prazoPorFotos, type Catalogo, type CategoriaId, type OpcaoDeslocamento, type PrecoFoto } from "./catalogo";
@@ -146,7 +146,7 @@ export function calcular(selecaoBruta: Selecao, cat: Catalogo): Calculo {
   };
 
   if (categoria.temSessao) {
-    // Pacote fora do montador (legado ou desativado) ainda é aceito: o painel
+    // Pacote fora do montador (legado ou desativado) ainda é aceito: a API
     // precisa ler orçamentos antigos. Quem esconde é o montador.
     const pacote = cat.pacotes.find((p) => p.id === sel.pacoteId && p.categoria === categoria.id);
     if (!pacote) {
@@ -431,7 +431,7 @@ export function gerarMensagem(m: Mensagem, cat: Catalogo): string {
 }
 
 // ---------------------------------------------------------------------------
-// Leitura do texto colado no painel
+// Leitura do texto colado (era do painel; segue útil para testes e para a [ref])
 // ---------------------------------------------------------------------------
 
 export interface LeituraOrcamento {

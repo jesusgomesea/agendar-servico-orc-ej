@@ -2,7 +2,7 @@
 //
 // Fluxo: escolhe o serviço → o pacote → ajustes (horas, fotos, entrega,
 // deslocamento) → seus dados → "Enviar pelo WhatsApp". O valor é calculado a
-// cada clique por `calcular()` (lib/orcamento.ts), a mesma conta que o painel
+// cada clique por `calcular()` (lib/orcamento.ts), a mesma conta que a API de recálculo (usada pelo Orça Aqui)
 // refaz ao colar a mensagem.
 //
 // O rascunho fica no localStorage do aparelho do cliente: se ele fechar a aba

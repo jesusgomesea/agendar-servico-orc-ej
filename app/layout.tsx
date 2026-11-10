@@ -1,8 +1,8 @@
-// Layout raiz: fontes, metadados de compartilhamento e os provedores globais
-// (sessão do Identity — que trata os links de e-mail em qualquer página — e avisos).
+// Layout raiz: fontes, metadados de compartilhamento e o provedor de avisos.
+// O painel de agendamentos saiu daqui e mora no Orça Aqui; este site é só o
+// montador público e a API pública de recálculo/catálogo.
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import ProvedorSessao from "@/components/auth/ProvedorSessao";
 import { CATALOGO } from "@/lib/catalogo";
 import { ProvedorAvisos } from "@/components/ui/Avisos";
 import "./globals.css";
@@ -33,9 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
       <body className="min-h-dvh">
-        <ProvedorSessao>
-          <ProvedorAvisos>{children}</ProvedorAvisos>
-        </ProvedorSessao>
+        <ProvedorAvisos>{children}</ProvedorAvisos>
       </body>
     </html>
   );

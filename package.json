@@ -2,10 +2,9 @@
   "name": "agendar-servico",
   "private": true,
   "version": "0.1.0",
-  "description": "Eluan Jesus Fotografia — montador de orçamento público + painel de agendamentos (Netlify Identity + Blobs)",
+  "description": "Eluan Jesus Fotografia — montador de orçamento público e API pública da tabela (o painel mora no Orça Aqui)",
   "scripts": {
-    "dev": "netlify dev",
-    "dev:next": "next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -14,8 +13,6 @@
   "dependencies": {
     "@fontsource-variable/fraunces": "^5.2.8",
     "@fontsource-variable/inter": "^5.2.8",
-    "@netlify/blobs": "^11.0.3",
-    "@netlify/identity": "^2.0.0",
     "lucide-react": "^1.31.0",
     "next": "^16.4.5",
     "react": "^19.2.8",

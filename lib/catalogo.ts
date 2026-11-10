@@ -1,15 +1,15 @@
 // Tabela de preços da Eluan Jesus Fotografia — fonte única de valores do site.
 //
-// Tudo que o cliente vê no montador e tudo que o painel recalcula sai daqui:
+// Tudo que o cliente vê no montador e tudo que a API de recálculo (Orça Aqui) refaz sai daqui:
 // pacotes, prazos, adicionais, deslocamento, auxiliar e sinal.
 // Mudou preço? Edite este arquivo E aumente `versao`: o código que vai no texto
-// do WhatsApp carrega a versão, e o painel avisa quando um orçamento foi gerado
+// do WhatsApp carrega a versão, e o Orça Aqui avisa quando um orçamento foi gerado
 // com uma tabela anterior (o valor que o cliente viu pode não bater mais).
 //
 // Políticas (incluso, chuva, cancelamento, remarcação…) saíram do site na v4:
 // são cláusulas do contrato, enviado em PDF pelo WhatsApp.
 //
-// Fase 2 do plano: estes valores passam a ser editáveis pelo painel (Netlify
+// Fase 2 do plano: estes valores passam a ser editáveis (Netlify
 // Blobs). Por isso o resto do código recebe o catálogo como parâmetro em vez de
 // importar a constante direto — trocar a origem não mexe nas regras.
 
@@ -38,7 +38,7 @@ export interface Categoria {
   foto?: PrecoFoto;
   /** Pacote Personalizado: tempo de cobertura em blocos de minutos + fotos editadas. */
   personalizado?: Personalizado;
-  /** Saiu do site; continua aqui só para o painel ler orçamentos antigos. */
+  /** Saiu do site; continua aqui só para a API ler orçamentos antigos. */
   legado?: boolean;
 }
 
@@ -67,7 +67,7 @@ export interface Pacote {
   /** Prazo de entrega padrão (sem custo) deste pacote. */
   prazo: string;
   destaque?: boolean;
-  /** false = some do montador (o painel ainda lê orçamentos antigos com ele). Ausente = ativo. */
+  /** false = some do montador (a API ainda lê orçamentos antigos com ele). Ausente = ativo. */
   ativo?: boolean;
   /** Aviso curto mostrado no cartão do pacote. */
   aviso?: string;
@@ -78,7 +78,7 @@ export interface Pacote {
    */
   personalizado?: boolean;
   /**
-   * Pacote que saiu da tabela. Fica aqui só para o painel ler mensagens antigas
+   * Pacote que saiu da tabela. Fica aqui só para a API ler mensagens antigas
    * que ainda circulam (ids nunca são reaproveitados — ver MANUTENCAO §3). Pode
    * ser apagado quando os orçamentos que o usam expirarem (`validadeDias`).
    */
@@ -282,7 +282,7 @@ export const CATALOGO: Catalogo = {
       personalizado: true,
     },
 
-    // Tabela v2: só para ler orçamentos antigos no painel.
+    // Tabela v2: só para a API ler orçamentos antigos.
     { id: "ev-express", categoria: "evento", nome: "Express", duracao: "até 1h30", entrega: "30–40 fotos", preco: 250, prazo: "até 10 dias", legado: true },
     { id: "ev-curta", categoria: "evento", nome: "Curta", duracao: "até 2h30", entrega: "60–80 fotos", preco: 350, prazo: "até 10 dias", legado: true },
     { id: "ev-padrao", categoria: "evento", nome: "Padrão", duracao: "3h–4h30", entrega: "100–130 fotos", preco: 530, prazo: "até 10 dias", legado: true },

@@ -37,9 +37,6 @@ export default function Inicio() {
           <span>
             © {new Date().getFullYear()} {cat.contato.nome} · {cat.contato.cidade}
           </span>
-          <a href="/painel" className="hover:text-texto">
-            Área do fotógrafo
-          </a>
         </div>
       </footer>
     </>

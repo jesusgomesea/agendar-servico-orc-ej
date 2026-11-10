@@ -1,5 +1,5 @@
 // Recálculo público de um orçamento a partir só da linha [ref …] — o contrato
-// entre este site (fonte da tabela de preços) e o Orça Aqui (onde o painel vive).
+// entre este site (fonte da tabela de preços) e o Orça Aqui (onde a agenda vive).
 //
 // Por que só a [ref]: ela tem a escolha do cliente, mas não nome, telefone nem
 // local. Assim o Orça Aqui recalcula sem mandar dado pessoal para cá, e preço e
